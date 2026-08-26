@@ -2,7 +2,7 @@ import concurrent.futures
 
 import streamlit as st
 
-from core import config, context_pack, llm, schema, search
+from core import config, context_pack, feedback, llm, schema, search
 
 st.set_page_config(page_title="BusinessAnalysisPack", page_icon="🔬", layout="wide")
 
@@ -54,6 +54,7 @@ if run:
     st.session_state["pack_md"] = context_pack.build_pack(target, task_results)
     st.session_state["pack_target"] = target
     st.session_state["pack_failures"] = failures
+    st.session_state["feedback_done"] = False
     progress.empty()
 
 if st.session_state.get("pack_failures"):
@@ -69,3 +70,36 @@ if "pack_md" in st.session_state:
     )
     st.divider()
     st.markdown(st.session_state["pack_md"])
+
+    st.divider()
+    st.subheader("이 자료가 도움이 되었나요?")
+    if st.session_state.get("feedback_done"):
+        st.success("피드백 감사합니다!")
+    else:
+        rating = st.feedback("stars")
+        comment = st.text_area("어떤 부분을 개선하면 좋을까요? (선택)")
+        if st.button("피드백 제출", disabled=rating is None):
+            feedback.save(
+                target=st.session_state["pack_target"],
+                rating=rating + 1,
+                comment=comment,
+            )
+            st.session_state["feedback_done"] = True
+            st.rerun()
+
+with st.expander("관리자: 피드백 보기"):
+    code = st.text_input("코드 입력", type="password")
+    if code:
+        if config.ADMIN_CODE and code == config.ADMIN_CODE:
+            rows = feedback.load_all()
+            st.write(f"총 {len(rows)}건")
+            if rows:
+                st.dataframe(rows, use_container_width=True)
+                st.download_button(
+                    "피드백 CSV 다운로드",
+                    data=feedback.to_csv_string(rows),
+                    file_name="feedback.csv",
+                    mime="text/csv",
+                )
+        else:
+            st.error("코드가 올바르지 않습니다.")
