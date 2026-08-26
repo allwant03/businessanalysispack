@@ -2,7 +2,7 @@ import concurrent.futures
 
 import streamlit as st
 
-from core import config, context_pack, feedback, llm, schema, search
+from core import config, context_pack, evidence, feedback, llm, schema, search
 
 st.set_page_config(page_title="BusinessAnalysisPack", page_icon="🔬", layout="wide")
 
@@ -20,6 +20,55 @@ def run_task(task: dict, target: str) -> dict:
     results = search.search(task["query"])
     data = llm.extract(task["label"], target, results)
     return {"task": task, "sources": results, "data": data}
+
+
+def render_report(target: str, task_results: list[dict]) -> None:
+    st.subheader(f"{target} 리포트")
+    st.caption("아래 원본 자료(AI Context Pack)를 사람이 읽기 쉽게 정리한 화면입니다. 항목을 눌러 펼쳐보세요.")
+
+    by_category: dict[str, list[dict]] = {}
+    for tr in task_results:
+        by_category.setdefault(tr["task"]["category"], []).append(tr)
+
+    for category, items in by_category.items():
+        st.markdown(f"#### {schema.CATEGORY_LABELS.get(category, category)}")
+        for tr in items:
+            task, sources, data = tr["task"], tr["sources"], tr["data"]
+            discrepancies = data.get("discrepancies", [])
+            interpretations = data.get("interpretations", [])
+            facts = data.get("facts", [])
+            hypotheses = data.get("hypotheses", [])
+
+            with st.expander(task["label"]):
+                if discrepancies:
+                    st.markdown("**⚠️ 자료 간 차이가 있는 부분**")
+                    for d in discrepancies:
+                        st.markdown(f"- {d.get('topic', '')}")
+                        if d.get("note"):
+                            st.caption(d["note"])
+
+                if interpretations:
+                    st.markdown("**핵심 해석**")
+                    for i in interpretations:
+                        st.markdown(f"- {i.get('statement', '')}")
+
+                if facts:
+                    st.markdown("**세부 근거**")
+                    for f in facts:
+                        st.markdown(f"- {f.get('statement', '')}")
+                        idx = f.get("source_index")
+                        src = sources[idx] if isinstance(idx, int) and 0 <= idx < len(sources) else None
+                        if src:
+                            tier = evidence.classify_tier(src.get("url", ""))
+                            st.caption(f"{src.get('title', '')} · {tier}")
+
+                if hypotheses:
+                    st.markdown("**추정 (직접 근거 없음)**")
+                    for h in hypotheses:
+                        st.markdown(f"- {h.get('statement', '')}")
+
+                if not (discrepancies or interpretations or facts or hypotheses):
+                    st.caption("이 항목은 조사된 내용이 없습니다.")
 
 
 target = st.text_input("분석 대상 (기업명 또는 산업명)", placeholder="예: SK하이닉스")
@@ -52,6 +101,7 @@ if run:
 
     progress.progress(1.0, text="Context Pack 생성 중...")
     st.session_state["pack_md"] = context_pack.build_pack(target, task_results)
+    st.session_state["pack_task_results"] = task_results
     st.session_state["pack_target"] = target
     st.session_state["pack_failures"] = failures
     st.session_state["feedback_done"] = False
@@ -62,14 +112,23 @@ if st.session_state.get("pack_failures"):
         st.warning(f"'{label}' 조사 중 오류가 발생해 이 항목은 Context Pack에서 제외됐습니다: {err}")
 
 if "pack_md" in st.session_state:
+    render_report(st.session_state["pack_target"], st.session_state["pack_task_results"])
+
+    st.divider()
+    st.subheader("AI Context Pack (원본)")
+    st.caption(
+        "이 파일을 ChatGPT나 Claude에 붙여넣고 원하는 걸 요청하면 됩니다. "
+        "예: \"이 자료와 제 이력서를 참고해서 지원동기를 작성해줘\" / "
+        "\"이 자료와 제 제품 아이디어를 참고해서 시장 진입 전략을 짚어줘\""
+    )
     st.download_button(
         "Context Pack 다운로드 (.md)",
         data=st.session_state["pack_md"],
         file_name=f"businessanalysispack_{st.session_state['pack_target']}.md",
         mime="text/markdown",
     )
-    st.divider()
-    st.markdown(st.session_state["pack_md"])
+    with st.expander("원본 텍스트 보기"):
+        st.markdown(st.session_state["pack_md"])
 
     st.divider()
     st.subheader("이 자료가 도움이 되었나요?")
