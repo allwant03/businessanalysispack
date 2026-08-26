@@ -1,4 +1,5 @@
 import concurrent.futures
+import html
 from datetime import date
 
 import pandas as pd
@@ -8,6 +9,50 @@ import streamlit as st
 from core import config, context_pack, dart, evidence, feedback, llm, schema, search, usage
 
 TIER_COLORS = {"TIER1": "#1f8a5f", "TIER2": "#b8792e", "TIER3": "#7c8990"}
+
+CUSTOM_CSS = """
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap');
+
+html, body, [class*="css"] { font-family: 'IBM Plex Sans', -apple-system, sans-serif; }
+
+h1, h2, h3, h4 { letter-spacing: -0.01em; }
+
+h4 {
+    color: #0e7c86;
+    border-left: 4px solid #0e7c86;
+    padding-left: 10px;
+    margin-top: 1.6em !important;
+}
+
+.tier-badge {
+    display: inline-block;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.7rem;
+    padding: 1px 8px;
+    border-radius: 4px;
+    letter-spacing: 0.03em;
+    vertical-align: middle;
+}
+.tier-badge.tier1 { background: #e0f2e9; color: #1f8a5f; }
+.tier-badge.tier2 { background: #f5ead9; color: #b8792e; }
+.tier-badge.tier3 { background: #e9edee; color: #7c8990; }
+
+.source-line { font-size: 0.85rem; margin: 2px 0 12px 0; }
+.source-line a { color: #5b6b72; text-decoration: none; }
+.source-line a:hover { text-decoration: underline; }
+</style>
+"""
+
+
+def _source_line(src: dict, tier: str) -> str:
+    safe_title = html.escape(src.get("title") or src.get("url", ""))
+    safe_url = html.escape(src.get("url", ""), quote=True)
+    badge_class = tier.lower()
+    return (
+        f'<div class="source-line"><a href="{safe_url}" target="_blank" rel="noopener noreferrer">{safe_title}</a> '
+        f'<span class="tier-badge {badge_class}">{tier}</span></div>'
+    )
 
 
 def _render_pie(fig, key: str) -> None:
@@ -28,6 +73,7 @@ def _render_bar(fig, key: str) -> None:
         st.plotly_chart(fig, use_container_width=False, key=key)
 
 st.set_page_config(page_title="BusinessAnalysisPack", page_icon="🔬", layout="wide")
+st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
 st.title("BusinessAnalysisPack")
 st.caption("제조업 산업·기업 리서치를 검증된 AI Context Pack으로 만듭니다.")
@@ -245,7 +291,7 @@ def render_report(target: str, task_results: list[dict]) -> None:
                         src = sources[idx] if isinstance(idx, int) and 0 <= idx < len(sources) else None
                         if src and src.get("url"):
                             tier = evidence.classify_tier(src["url"])
-                            st.caption(f"[{src.get('title', src['url'])}]({src['url']}) · {tier}")
+                            st.markdown(_source_line(src, tier), unsafe_allow_html=True)
 
                 if hypotheses:
                     st.markdown("**추정 (직접 근거 없음)**")
