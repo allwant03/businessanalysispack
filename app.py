@@ -10,13 +10,13 @@ from core import config, context_pack, dart, evidence, feedback, llm, schema, se
 TIER_COLORS = {"TIER1": "#1f8a5f", "TIER2": "#b8792e", "TIER3": "#7c8990"}
 
 
-def _render_pie(fig) -> None:
+def _render_pie(fig, key: str) -> None:
     # 파이차트는 wide 레이아웃 폭에 맞춰 늘리면 원이 작은 채로 옆에 빈 공간만 커져서
     # 정사각형에 가까운 고정 크기로 만들고 가운데 열에 배치한다.
     fig.update_layout(width=420, height=420, margin=dict(t=48, b=10, l=10, r=10))
     _, center, _ = st.columns([1, 2, 1])
     with center:
-        st.plotly_chart(fig, use_container_width=False)
+        st.plotly_chart(fig, use_container_width=False, key=key)
 
 st.set_page_config(page_title="BusinessAnalysisPack", page_icon="🔬", layout="wide")
 
@@ -70,10 +70,10 @@ def render_tier_overview(task_results: list[dict]) -> None:
         color_discrete_map=TIER_COLORS,
         hole=0.45,
     )
-    _render_pie(fig)
+    _render_pie(fig, key="tier_overview_pie")
 
 
-def render_metrics_section(metrics: list[dict], sources: list[dict]) -> None:
+def render_metrics_section(metrics: list[dict], sources: list[dict], key_prefix: str) -> None:
     rows = []
     for m in metrics:
         try:
@@ -99,7 +99,12 @@ def render_metrics_section(metrics: list[dict], sources: list[dict]) -> None:
 
     df = pd.DataFrame(rows)
     st.markdown("**주요 수치**")
-    st.dataframe(df[["지표", "수치", "단위", "시점", "출처"]], use_container_width=True, hide_index=True)
+    st.dataframe(
+        df[["지표", "수치", "단위", "시점", "출처"]],
+        use_container_width=True,
+        hide_index=True,
+        key=f"{key_prefix}_metrics_df",
+    )
 
     single_df = df[df["구성그룹"] == ""].sort_values("_sort")
     for label, group_df in single_df.groupby("지표", sort=False):
@@ -108,20 +113,20 @@ def render_metrics_section(metrics: list[dict], sources: list[dict]) -> None:
             fig = px.bar(group_df, x="시점", y="수치", title=f"{label} 추이 ({unit})")
             fig.update_xaxes(categoryorder="array", categoryarray=group_df["시점"].tolist())
             fig.update_layout(margin=dict(t=40, b=10, l=10, r=10), height=340)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True, key=f"{key_prefix}_bar_{label}")
 
     grouped_df = df[df["구성그룹"] != ""]
     for group_name, group_df in grouped_df.groupby("구성그룹"):
         if len(group_df) >= 2:
             fig = px.pie(group_df, names="지표", values="수치", title=group_name, hole=0.35)
-            _render_pie(fig)
+            _render_pie(fig, key=f"{key_prefix}_pie_{group_name}")
 
 
-def render_discrepancy_table(discrepancies: list[dict], sources: list[dict]) -> None:
+def render_discrepancy_table(discrepancies: list[dict], sources: list[dict], key_prefix: str) -> None:
     if not discrepancies:
         return
     st.markdown("**⚠️ 자료 간 차이가 있는 부분**")
-    for d in discrepancies:
+    for idx_d, d in enumerate(discrepancies):
         st.markdown(f"_{d.get('topic', '')}_")
         rows = []
         for v in d.get("values", []):
@@ -135,7 +140,12 @@ def render_discrepancy_table(discrepancies: list[dict], sources: list[dict]) -> 
                 }
             )
         if rows:
-            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+            st.dataframe(
+                pd.DataFrame(rows),
+                use_container_width=True,
+                hide_index=True,
+                key=f"{key_prefix}_discrepancy_{idx_d}",
+            )
         if d.get("note"):
             st.caption(d["note"])
 
@@ -172,7 +182,7 @@ def render_dart_section(summary: dict) -> None:
     st.subheader("공식 재무제표 (DART)")
     st.caption(f"DART 전자공시시스템 {summary['fs_div']}재무제표 기준 · 수치는 Python이 직접 계산 · TIER1")
     df = pd.DataFrame(rows)
-    st.dataframe(df, use_container_width=True, hide_index=True)
+    st.dataframe(df, use_container_width=True, hide_index=True, key="dart_summary_df")
 
     for col, title in [("매출액(억원)", "매출액 추이 (억원)"), ("영업이익(억원)", "영업이익 추이 (억원)")]:
         chart_df = df.dropna(subset=[col]).sort_values("연도")
@@ -180,7 +190,7 @@ def render_dart_section(summary: dict) -> None:
             fig = px.bar(chart_df, x="연도", y=col, title=title)
             fig.update_xaxes(type="category")
             fig.update_layout(margin=dict(t=40, b=10, l=10, r=10), height=340)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True, key=f"dart_{col}")
 
 
 def render_report(target: str, task_results: list[dict]) -> None:
@@ -212,7 +222,7 @@ def render_report(target: str, task_results: list[dict]) -> None:
                     for i in interpretations:
                         st.markdown(f"- {i.get('statement', '')}")
 
-                render_metrics_section(metrics, sources)
+                render_metrics_section(metrics, sources, key_prefix=task["id"])
 
                 if facts:
                     st.markdown("**세부 근거** (최신순)")
@@ -235,17 +245,20 @@ def render_report(target: str, task_results: list[dict]) -> None:
                     for h in hypotheses:
                         st.markdown(f"- {h.get('statement', '')}")
 
-                render_discrepancy_table(discrepancies, sources)
+                render_discrepancy_table(discrepancies, sources, key_prefix=task["id"])
 
                 if not (discrepancies or interpretations or facts or hypotheses or metrics):
                     st.caption("이 항목은 조사된 내용이 없습니다.")
 
 
 target = st.text_input("분석 대상 (기업명 또는 산업명)", placeholder="예: SK하이닉스")
+include_opportunity = st.checkbox(
+    "고객·Pain Point·비즈니스모델까지 조사 (항목 5개 추가, 시간 더 걸림)"
+)
 run = st.button("리서치 시작", disabled=not target)
 
 if run:
-    tasks = schema.build_tasks(target)
+    tasks = schema.build_tasks(target, include_opportunity=include_opportunity)
     order = {t["id"]: i for i, t in enumerate(tasks)}
     task_results = []
     failures = []
@@ -329,7 +342,7 @@ with st.expander("관리자: 사용 현황 · 피드백 보기"):
             usage_rows = usage.load_all()
             st.write(f"**총 사용 횟수: {len(usage_rows)}회**")
             if usage_rows:
-                st.dataframe(usage_rows, use_container_width=True)
+                st.dataframe(usage_rows, use_container_width=True, key="admin_usage_df")
                 st.download_button(
                     "사용 로그 CSV 다운로드",
                     data=usage.to_csv_string(usage_rows),
@@ -341,7 +354,7 @@ with st.expander("관리자: 사용 현황 · 피드백 보기"):
             rows = feedback.load_all()
             st.write(f"**총 피드백 건수: {len(rows)}건**")
             if rows:
-                st.dataframe(rows, use_container_width=True)
+                st.dataframe(rows, use_container_width=True, key="admin_feedback_df")
                 st.download_button(
                     "피드백 CSV 다운로드",
                     data=feedback.to_csv_string(rows),

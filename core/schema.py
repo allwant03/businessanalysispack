@@ -71,16 +71,56 @@ SEMICONDUCTOR_SCHEMA = {
     ],
 }
 
+# 선택 항목: 산업/기업/경쟁사 분석에서 한 걸음 더 들어가 고객·Pain Point·비즈니스모델까지 조사한다.
+# "자소서용"/"공모전용"이라고 목적을 못박지 않고 조사 깊이로만 표현 — 이 자료를 어디에 쓸지는 사용자가 정한다.
+OPPORTUNITY_SCHEMA = [
+    {
+        "id": "OPP-1",
+        "label": "고객 세그먼트 및 니즈",
+        "query": "{target} 고객사 요구사항 니즈 구매 기준",
+        "recency": "year",
+    },
+    {
+        "id": "OPP-2",
+        "label": "미충족 수요 및 Pain Point",
+        "query": "{target} 산업 문제점 애로사항 개선 요구",
+        "recency": "year",
+    },
+    {
+        "id": "OPP-3",
+        "label": "유사 제품·서비스 사례",
+        "query": "{target} 대체 솔루션 유사 제품 비교",
+        "recency": None,
+    },
+    {
+        "id": "OPP-4",
+        "label": "비즈니스 모델 사례",
+        "query": "{target} 수익모델 비즈니스모델 사례",
+        "recency": None,
+    },
+    {
+        "id": "OPP-5",
+        "label": "시장 진입 구조 및 진입장벽",
+        "query": "{target} 시장 진입장벽 신규진입 규제 라이선스",
+        "recency": "year",
+    },
+]
+
 CATEGORY_LABELS = {
     "industry": "산업",
     "company": "기업",
     "competitor": "경쟁사",
+    "opportunity": "사업기회",
 }
 
 
-def build_tasks(target: str) -> list[dict]:
+def build_tasks(target: str, include_opportunity: bool = False) -> list[dict]:
+    schema_dict = dict(SEMICONDUCTOR_SCHEMA)
+    if include_opportunity:
+        schema_dict["opportunity"] = OPPORTUNITY_SCHEMA
+
     tasks = []
-    for category, items in SEMICONDUCTOR_SCHEMA.items():
+    for category, items in schema_dict.items():
         for item in items:
             tasks.append(
                 {
