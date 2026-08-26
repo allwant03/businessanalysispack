@@ -4,7 +4,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from core import config, context_pack, evidence, feedback, llm, schema, search
+from core import config, context_pack, evidence, feedback, llm, schema, search, usage
 
 TIER_COLORS = {"TIER1": "#1f8a5f", "TIER2": "#b8792e", "TIER3": "#7c8990"}
 
@@ -224,6 +224,7 @@ if run:
     st.session_state["pack_target"] = target
     st.session_state["pack_failures"] = failures
     st.session_state["feedback_done"] = False
+    usage.log_run(target, len(tasks), len(failures))
     progress.empty()
 
 if st.session_state.get("pack_failures"):
@@ -265,12 +266,24 @@ if "pack_md" in st.session_state:
             st.session_state["feedback_done"] = True
             st.rerun()
 
-with st.expander("관리자: 피드백 보기"):
+with st.expander("관리자: 사용 현황 · 피드백 보기"):
     code = st.text_input("코드 입력", type="password")
     if code:
         if config.ADMIN_CODE and code == config.ADMIN_CODE:
+            usage_rows = usage.load_all()
+            st.write(f"**총 사용 횟수: {len(usage_rows)}회**")
+            if usage_rows:
+                st.dataframe(usage_rows, use_container_width=True)
+                st.download_button(
+                    "사용 로그 CSV 다운로드",
+                    data=usage.to_csv_string(usage_rows),
+                    file_name="usage_log.csv",
+                    mime="text/csv",
+                )
+
+            st.divider()
             rows = feedback.load_all()
-            st.write(f"총 {len(rows)}건")
+            st.write(f"**총 피드백 건수: {len(rows)}건**")
             if rows:
                 st.dataframe(rows, use_container_width=True)
                 st.download_button(
