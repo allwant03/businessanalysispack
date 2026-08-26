@@ -61,13 +61,13 @@ SEMICONDUCTOR_SCHEMA = {
         {
             "id": "CP-1",
             "label": "경쟁사 식별 및 비교",
-            "query": "{target} 경쟁사 비교 시장점유율 삼성전자 TSMC SK하이닉스 마이크론",
+            "query": "{target} 경쟁사 비교 시장점유율 삼성전자 TSMC SK하이닉스 마이크론 UMC PSMC 매그나칩반도체 키파운드리",
             "recency": "year",
         },
         {
             "id": "CP-2",
             "label": "기술/원가 경쟁력",
-            "query": "{target} 경쟁사 수율 원가 기술 세대 비교 삼성전자 TSMC SK하이닉스 마이크론",
+            "query": "{target} 경쟁사 수율 원가 기술 세대 비교 삼성전자 TSMC SK하이닉스 마이크론 UMC PSMC 매그나칩반도체 키파운드리",
             "recency": "year",
         },
     ],
