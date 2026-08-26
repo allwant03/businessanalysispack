@@ -4,9 +4,9 @@ import streamlit as st
 
 from core import config, context_pack, llm, schema, search
 
-st.set_page_config(page_title="WaferPack", page_icon="🔬", layout="wide")
+st.set_page_config(page_title="BusinessAnalysisPack", page_icon="🔬", layout="wide")
 
-st.title("WaferPack")
+st.title("BusinessAnalysisPack")
 st.caption("반도체 산업·기업 리서치를 검증된 AI Context Pack으로 만듭니다.")
 
 if not config.is_configured():
@@ -64,7 +64,7 @@ if "pack_md" in st.session_state:
     st.download_button(
         "Context Pack 다운로드 (.md)",
         data=st.session_state["pack_md"],
-        file_name=f"waferpack_{st.session_state['pack_target']}.md",
+        file_name=f"businessanalysispack_{st.session_state['pack_target']}.md",
         mime="text/markdown",
     )
     st.divider()
