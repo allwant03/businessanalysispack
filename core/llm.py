@@ -62,3 +62,8 @@ def extract(task_label: str, target: str, search_results: list[dict]) -> dict:
         return json.loads(raw)
     except json.JSONDecodeError:
         return {"facts": [], "discrepancies": [], "interpretations": [], "hypotheses": [], "_parse_error": raw}
+
+
+def warmup() -> None:
+    """Force client creation on the main thread before fan-out to worker threads."""
+    _get_client()

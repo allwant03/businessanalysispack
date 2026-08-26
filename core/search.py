@@ -15,3 +15,8 @@ def _get_client() -> TavilyClient:
 def search(query: str, max_results: int = 5) -> list[dict]:
     response = _get_client().search(query=query, max_results=max_results, search_depth="advanced")
     return response.get("results", [])
+
+
+def warmup() -> None:
+    """Force client creation on the main thread before fan-out to worker threads."""
+    _get_client()

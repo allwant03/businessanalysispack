@@ -4,6 +4,7 @@ TIER1_DOMAINS = [
     "dart.fss.or.kr",
     "data.go.kr",
     ".go.kr",
+    "sec.gov",  # 미국 상장사(Micron 등) 공시 — DART의 미국판
     # 기업 공식 IR/뉴스룸 — 반도체 스키마 대상 기업 위주, 업종 확장 시 함께 보강
     "news.skhynix.co.kr",
     "skhynix.com",
@@ -23,6 +24,16 @@ TIER2_DOMAINS = [
     "canalys.com",
     "digitimes.com",
     "wsts.org",
+    "coherentmarketinsights.com",
+    "researchnester.com",
+    "industrialinfo.com",
+    "reportprime.com",
+    # 재무데이터 애그리게이터 — 원출처가 공시라 블로그보다 신뢰도 높음
+    "finance.yahoo.com",
+    "macrotrends.net",
+    "csimarket.com",
+    "tikr.com",
+    "kr.investing.com",
     # 통신사·주요 경제지·반도체 전문매체
     "reuters.com",
     "bloomberg.com",
@@ -40,6 +51,16 @@ TIER2_DOMAINS = [
     "edaily.co.kr",
     "sedaily.com",
     "hani.co.kr",
+    "joongang.co.kr",
+    "news1.kr",
+    "zdnet.co.kr",
+    "bloter.net",
+    "mtn.co.kr",
+    "inews24.com",
+    "electimes.com",
+    "einfomax.co.kr",
+    "ajunews.com",
+    "nocutnews.co.kr",
 ]
 
 
