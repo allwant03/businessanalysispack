@@ -18,6 +18,15 @@ def _render_pie(fig, key: str) -> None:
     with center:
         st.plotly_chart(fig, use_container_width=False, key=key)
 
+
+def _render_bar(fig, key: str) -> None:
+    # wide 레이아웃 전체 폭(1200px+)에 막대 3~5개짜리 차트를 그냥 늘리면
+    # 데이터에 비해 차트만 크고 헐렁해 보인다. 폭을 적당히 제한하고 가운데 배치한다.
+    fig.update_layout(width=760, height=380, margin=dict(t=40, b=10, l=10, r=10))
+    _, center, _ = st.columns([1, 4, 1])
+    with center:
+        st.plotly_chart(fig, use_container_width=False, key=key)
+
 st.set_page_config(page_title="BusinessAnalysisPack", page_icon="🔬", layout="wide")
 
 st.title("BusinessAnalysisPack")
@@ -98,9 +107,10 @@ def render_metrics_section(metrics: list[dict], sources: list[dict], key_prefix:
         return
 
     df = pd.DataFrame(rows)
-    st.markdown("**주요 수치**")
+    st.markdown("**주요 수치** (최신순)")
+    display_df = df.sort_values("_sort", ascending=False)
     st.dataframe(
-        df[["지표", "수치", "단위", "시점", "출처"]],
+        display_df[["지표", "수치", "단위", "시점", "출처"]],
         use_container_width=True,
         hide_index=True,
         key=f"{key_prefix}_metrics_df",
@@ -112,8 +122,7 @@ def render_metrics_section(metrics: list[dict], sources: list[dict], key_prefix:
             unit = group_df["단위"].iloc[0]
             fig = px.bar(group_df, x="시점", y="수치", title=f"{label} 추이 ({unit})")
             fig.update_xaxes(categoryorder="array", categoryarray=group_df["시점"].tolist())
-            fig.update_layout(margin=dict(t=40, b=10, l=10, r=10), height=340)
-            st.plotly_chart(fig, use_container_width=True, key=f"{key_prefix}_bar_{label}")
+            _render_bar(fig, key=f"{key_prefix}_bar_{label}")
 
     grouped_df = df[df["구성그룹"] != ""]
     for group_name, group_df in grouped_df.groupby("구성그룹"):
@@ -189,8 +198,7 @@ def render_dart_section(summary: dict) -> None:
         if len(chart_df) >= 2:
             fig = px.bar(chart_df, x="연도", y=col, title=title)
             fig.update_xaxes(type="category")
-            fig.update_layout(margin=dict(t=40, b=10, l=10, r=10), height=340)
-            st.plotly_chart(fig, use_container_width=True, key=f"dart_{col}")
+            _render_bar(fig, key=f"dart_{col}")
 
 
 def render_report(target: str, task_results: list[dict]) -> None:
@@ -218,9 +226,8 @@ def render_report(target: str, task_results: list[dict]) -> None:
 
             with st.expander(task["label"]):
                 if interpretations:
-                    st.markdown("**핵심 해석**")
-                    for i in interpretations:
-                        st.markdown(f"- {i.get('statement', '')}")
+                    st.markdown("**핵심 요약**")
+                    st.markdown(" ".join(i.get("statement", "") for i in interpretations))
 
                 render_metrics_section(metrics, sources, key_prefix=task["id"])
 
