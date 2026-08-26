@@ -61,13 +61,13 @@ SEMICONDUCTOR_SCHEMA = {
         {
             "id": "CP-1",
             "label": "경쟁사 식별 및 비교",
-            "query": "{target} 경쟁사 비교 시장점유율",
+            "query": "{target} 경쟁사 비교 시장점유율 삼성전자 TSMC SK하이닉스 마이크론",
             "recency": "year",
         },
         {
             "id": "CP-2",
             "label": "기술/원가 경쟁력",
-            "query": "{target} 경쟁사 수율 원가 기술 세대 비교",
+            "query": "{target} 경쟁사 수율 원가 기술 세대 비교 삼성전자 TSMC SK하이닉스",
             "recency": "year",
         },
     ],
@@ -130,13 +130,13 @@ BATTERY_SCHEMA = {
         {
             "id": "CP-1",
             "label": "경쟁사 식별 및 비교",
-            "query": "{target} 경쟁사 비교 시장점유율 배터리",
+            "query": "{target} 경쟁사 비교 시장점유율 LG에너지솔루션 삼성SDI SK온 CATL 에코프로비엠 솔브레인",
             "recency": "year",
         },
         {
             "id": "CP-2",
             "label": "기술/원가 경쟁력",
-            "query": "{target} 경쟁사 에너지밀도 원가 기술 비교",
+            "query": "{target} 경쟁사 에너지밀도 원가 기술 비교 LG에너지솔루션 삼성SDI SK온 CATL",
             "recency": "year",
         },
     ],
