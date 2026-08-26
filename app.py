@@ -1,10 +1,11 @@
 import concurrent.futures
+from datetime import date
 
 import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from core import config, context_pack, evidence, feedback, llm, schema, search, usage
+from core import config, context_pack, dart, evidence, feedback, llm, schema, search, usage
 
 TIER_COLORS = {"TIER1": "#1f8a5f", "TIER2": "#b8792e", "TIER3": "#7c8990"}
 
@@ -139,6 +140,49 @@ def render_discrepancy_table(discrepancies: list[dict], sources: list[dict]) -> 
             st.caption(d["note"])
 
 
+def render_dart_section(summary: dict) -> None:
+    years = sorted(summary["years"].keys(), reverse=True)
+    if not years:
+        return
+
+    rows = []
+    for y in years:
+        acc = summary["years"][y]
+        revenue = acc.get("매출액")
+        op_income = acc.get("영업이익")
+        net_income = acc.get("당기순이익")
+        liabilities = acc.get("부채총계")
+        equity = acc.get("자본총계")
+        prev_revenue = summary["years"].get(y - 1, {}).get("매출액")
+        yoy = (revenue - prev_revenue) / prev_revenue * 100 if revenue is not None and prev_revenue else None
+
+        rows.append(
+            {
+                "연도": y,
+                "매출액(억원)": round(revenue / 1e8, 1) if revenue is not None else None,
+                "영업이익(억원)": round(op_income / 1e8, 1) if op_income is not None else None,
+                "당기순이익(억원)": round(net_income / 1e8, 1) if net_income is not None else None,
+                "영업이익률(%)": round(op_income / revenue * 100, 1) if revenue and op_income is not None else None,
+                "순이익률(%)": round(net_income / revenue * 100, 1) if revenue and net_income is not None else None,
+                "부채비율(%)": round(liabilities / equity * 100, 1) if equity else None,
+                "매출 YoY(%)": round(yoy, 1) if yoy is not None else None,
+            }
+        )
+
+    st.subheader("공식 재무제표 (DART)")
+    st.caption(f"DART 전자공시시스템 {summary['fs_div']}재무제표 기준 · 수치는 Python이 직접 계산 · TIER1")
+    df = pd.DataFrame(rows)
+    st.dataframe(df, use_container_width=True, hide_index=True)
+
+    for col, title in [("매출액(억원)", "매출액 추이 (억원)"), ("영업이익(억원)", "영업이익 추이 (억원)")]:
+        chart_df = df.dropna(subset=[col]).sort_values("연도")
+        if len(chart_df) >= 2:
+            fig = px.bar(chart_df, x="연도", y=col, title=title)
+            fig.update_xaxes(type="category")
+            fig.update_layout(margin=dict(t=40, b=10, l=10, r=10), height=340)
+            st.plotly_chart(fig, use_container_width=True)
+
+
 def render_report(target: str, task_results: list[dict]) -> None:
     st.subheader(f"{target} 리포트")
     st.caption("아래 원본 자료(AI Context Pack)를 사람이 읽기 쉽게 정리한 화면입니다. 항목을 눌러 펼쳐보세요.")
@@ -230,6 +274,7 @@ if run:
     st.session_state["pack_task_results"] = task_results
     st.session_state["pack_target"] = target
     st.session_state["pack_failures"] = failures
+    st.session_state["pack_dart"] = dart.get_financial_summary(target, date.today().year)
     st.session_state["feedback_done"] = False
     usage.log_run(target, len(tasks), len(failures))
     progress.empty()
@@ -239,6 +284,10 @@ if st.session_state.get("pack_failures"):
         st.warning(f"'{label}' 조사 중 오류가 발생해 이 항목은 Context Pack에서 제외됐습니다: {err}")
 
 if "pack_md" in st.session_state:
+    if st.session_state.get("pack_dart"):
+        render_dart_section(st.session_state["pack_dart"])
+        st.divider()
+
     render_report(st.session_state["pack_target"], st.session_state["pack_task_results"])
 
     st.divider()

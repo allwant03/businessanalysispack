@@ -4,3 +4,4 @@ __pycache__/
 .streamlit/secrets.toml
 feedback.csv
 usage_log.csv
+.dart_corp_codes.xml
