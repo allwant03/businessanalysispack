@@ -7,7 +7,7 @@ PROMPT_TEMPLATES = [
 ]
 
 
-def build_pack(target: str, task_results: list[dict]) -> str:
+def build_pack(target: str, task_results: list[dict], industry: str = "반도체") -> str:
     counters = {"F": 0, "D": 0, "I": 0, "H": 0}
     id_map: dict[tuple[str, str], str] = {}
 
@@ -19,7 +19,12 @@ def build_pack(target: str, task_results: list[dict]) -> str:
     for tr in task_results:
         by_category.setdefault(tr["task"]["category"], []).append(tr)
 
-    lines = [f"# BusinessAnalysisPack Context — {target}", "", f"_반도체 Research Schema 기준, {len(task_results)}개 항목 조사_", ""]
+    lines = [
+        f"# BusinessAnalysisPack Context — {target}",
+        "",
+        f"_{industry} Research Schema 기준, {len(task_results)}개 항목 조사_",
+        "",
+    ]
 
     for category, items in by_category.items():
         lines.append(f"## {CATEGORY_LABELS.get(category, category)}")

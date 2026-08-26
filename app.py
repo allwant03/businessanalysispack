@@ -30,7 +30,7 @@ def _render_bar(fig, key: str) -> None:
 st.set_page_config(page_title="BusinessAnalysisPack", page_icon="🔬", layout="wide")
 
 st.title("BusinessAnalysisPack")
-st.caption("반도체 산업·기업 리서치를 검증된 AI Context Pack으로 만듭니다.")
+st.caption("제조업 산업·기업 리서치를 검증된 AI Context Pack으로 만듭니다.")
 
 if not config.is_configured():
     st.warning("`.env` 파일에 ANTHROPIC_API_KEY와 TAVILY_API_KEY를 설정해야 실행할 수 있습니다. `.env.example`을 복사해서 `.env`로 만드세요.")
@@ -39,14 +39,14 @@ if not config.is_configured():
 MAX_WORKERS = 5
 
 
-def run_task(task: dict, target: str, retries: int = 1) -> dict:
+def run_task(task: dict, target: str, industry: str, retries: int = 1) -> dict:
     try:
         results = search.search(task["query"], time_range=task.get("recency"))
-        data = llm.extract(task["label"], target, results)
+        data = llm.extract(task["label"], target, results, industry=industry)
         return {"task": task, "sources": results, "data": data}
     except Exception:
         if retries > 0:
-            return run_task(task, target, retries=retries - 1)
+            return run_task(task, target, industry, retries=retries - 1)
         raise
 
 
@@ -258,14 +258,18 @@ def render_report(target: str, task_results: list[dict]) -> None:
                     st.caption("이 항목은 조사된 내용이 없습니다.")
 
 
-target = st.text_input("분석 대상 (기업명 또는 산업명)", placeholder="예: SK하이닉스")
+industry = st.selectbox("업종 선택", options=list(schema.INDUSTRY_SCHEMAS.keys()))
+target = st.text_input(
+    "분석 대상 (기업명 또는 산업명)",
+    placeholder=schema.TARGET_PLACEHOLDERS.get(industry, ""),
+)
 include_opportunity = st.checkbox(
     "고객·Pain Point·비즈니스모델까지 조사 (항목 5개 추가, 시간 더 걸림)"
 )
 run = st.button("리서치 시작", disabled=not target)
 
 if run:
-    tasks = schema.build_tasks(target, include_opportunity=include_opportunity)
+    tasks = schema.build_tasks(target, industry=industry, include_opportunity=include_opportunity)
     order = {t["id"]: i for i, t in enumerate(tasks)}
     task_results = []
     failures = []
@@ -276,7 +280,7 @@ if run:
     llm.warmup()
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        futures = {executor.submit(run_task, task, target): task for task in tasks}
+        futures = {executor.submit(run_task, task, target, industry): task for task in tasks}
         done = 0
         for future in concurrent.futures.as_completed(futures):
             task = futures[future]
@@ -290,7 +294,7 @@ if run:
     task_results.sort(key=lambda tr: order[tr["task"]["id"]])
 
     progress.progress(1.0, text="Context Pack 생성 중...")
-    st.session_state["pack_md"] = context_pack.build_pack(target, task_results)
+    st.session_state["pack_md"] = context_pack.build_pack(target, task_results, industry=industry)
     st.session_state["pack_task_results"] = task_results
     st.session_state["pack_target"] = target
     st.session_state["pack_failures"] = failures

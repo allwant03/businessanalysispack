@@ -7,7 +7,7 @@ from . import config
 
 _client = None
 
-SYSTEM_PROMPT = """당신은 반도체 산업 리서치 애널리스트입니다. 주어진 검색 결과만 근거로 사용해 \
+SYSTEM_PROMPT = """당신은 제조업 산업 리서치 애널리스트입니다. 주어진 검색 결과만 근거로 사용해 \
 사실(FACT), 해석(INTERPRETATION), 추정(HYPOTHESIS), 출처 간 불일치(DISCREPANCY)를 구분합니다.
 
 규칙:
@@ -49,13 +49,14 @@ def _get_client() -> anthropic.Anthropic:
     return _client
 
 
-def extract(task_label: str, target: str, search_results: list[dict]) -> dict:
+def extract(task_label: str, target: str, search_results: list[dict], industry: str = "반도체") -> dict:
     numbered_sources = "\n\n".join(
         f"[{i}] {r.get('title', '')}\nURL: {r.get('url', '')}\n"
         f"발행일: {r.get('published_date') or '미상'}\n내용: {r.get('content', '')[:1200]}"
         for i, r in enumerate(search_results)
     )
-    user_prompt = f"""조사 항목: {task_label}
+    user_prompt = f"""업종: {industry}
+조사 항목: {task_label}
 대상: {target}
 오늘 날짜: {date.today().isoformat()}
 
