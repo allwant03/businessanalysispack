@@ -16,15 +16,24 @@ if not config.is_configured():
 MAX_WORKERS = 5
 
 
-def run_task(task: dict, target: str) -> dict:
-    results = search.search(task["query"])
-    data = llm.extract(task["label"], target, results)
-    return {"task": task, "sources": results, "data": data}
+def run_task(task: dict, target: str, retries: int = 1) -> dict:
+    try:
+        results = search.search(task["query"])
+        data = llm.extract(task["label"], target, results)
+        return {"task": task, "sources": results, "data": data}
+    except Exception:
+        if retries > 0:
+            return run_task(task, target, retries=retries - 1)
+        raise
 
 
 def render_report(target: str, task_results: list[dict]) -> None:
     st.subheader(f"{target} 리포트")
     st.caption("아래 원본 자료(AI Context Pack)를 사람이 읽기 쉽게 정리한 화면입니다. 항목을 눌러 펼쳐보세요.")
+    st.caption(
+        "**출처 신뢰도** · TIER1: 공시·공공데이터·기업 공식 발표 "
+        "· TIER2: 리서치기관·주요 언론 · TIER3: 그 외(블로그, SNS 등 — 별도 확인 권장)"
+    )
 
     by_category: dict[str, list[dict]] = {}
     for tr in task_results:
@@ -40,13 +49,6 @@ def render_report(target: str, task_results: list[dict]) -> None:
             hypotheses = data.get("hypotheses", [])
 
             with st.expander(task["label"]):
-                if discrepancies:
-                    st.markdown("**⚠️ 자료 간 차이가 있는 부분**")
-                    for d in discrepancies:
-                        st.markdown(f"- {d.get('topic', '')}")
-                        if d.get("note"):
-                            st.caption(d["note"])
-
                 if interpretations:
                     st.markdown("**핵심 해석**")
                     for i in interpretations:
@@ -58,14 +60,21 @@ def render_report(target: str, task_results: list[dict]) -> None:
                         st.markdown(f"- {f.get('statement', '')}")
                         idx = f.get("source_index")
                         src = sources[idx] if isinstance(idx, int) and 0 <= idx < len(sources) else None
-                        if src:
-                            tier = evidence.classify_tier(src.get("url", ""))
-                            st.caption(f"{src.get('title', '')} · {tier}")
+                        if src and src.get("url"):
+                            tier = evidence.classify_tier(src["url"])
+                            st.caption(f"[{src.get('title', src['url'])}]({src['url']}) · {tier}")
 
                 if hypotheses:
                     st.markdown("**추정 (직접 근거 없음)**")
                     for h in hypotheses:
                         st.markdown(f"- {h.get('statement', '')}")
+
+                if discrepancies:
+                    st.markdown("**⚠️ 자료 간 차이가 있는 부분**")
+                    for d in discrepancies:
+                        st.markdown(f"- {d.get('topic', '')}")
+                        if d.get("note"):
+                            st.caption(d["note"])
 
                 if not (discrepancies or interpretations or facts or hypotheses):
                     st.caption("이 항목은 조사된 내용이 없습니다.")

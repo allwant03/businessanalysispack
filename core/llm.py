@@ -16,6 +16,7 @@ SYSTEM_PROMPT = """당신은 반도체 산업 리서치 애널리스트입니다
 - HYPOTHESIS: 검색 결과에 직접 근거가 없는 추정. 추정임을 명확히 표시.
 - DISCREPANCY: 같은 항목에 대해 출처마다 수치·전망이 다르면 하나의 값으로 합치지 말고 각 출처의 값을 그대로 나열.
 - 검색 결과에 없는 내용은 지어내지 않는다. 관련 정보가 없으면 해당 배열을 비워둔다.
+- 문장 표현: statement는 자연스러운 문장으로 쓴다. INTERPRETATION/HYPOTHESIS라고 해서 모든 문장을 "~로 해석된다", "~로 추정된다", "~할 가능성이 있다"처럼 매번 같은 어미로 끝맺지 않는다. 어떤 성격의 문장인지는 카테고리 자체가 이미 나타내므로, 문장은 그냥 사실을 서술하듯 담백하게 쓴다.
 
 아래 JSON 형식으로만 응답한다. 다른 설명 텍스트는 추가하지 않는다.
 
@@ -30,7 +31,7 @@ SYSTEM_PROMPT = """당신은 반도체 산업 리서치 애널리스트입니다
 def _get_client() -> anthropic.Anthropic:
     global _client
     if _client is None:
-        _client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
+        _client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY, timeout=90.0)
     return _client
 
 
