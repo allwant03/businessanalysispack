@@ -75,8 +75,18 @@ def _render_bar(fig, key: str) -> None:
 st.set_page_config(page_title="BusinessAnalysisPack", page_icon="🔬", layout="wide")
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
-st.title("BusinessAnalysisPack")
-st.caption("제조업 산업·기업 리서치를 검증된 AI Context Pack으로 만듭니다.")
+st.markdown(
+    """
+    <div style="background: linear-gradient(135deg, #0e7c86, #0a5f68); padding: 26px 32px;
+                border-radius: 10px; margin-bottom: 24px;">
+        <div style="color: white; font-size: 1.7rem; font-weight: 700;">BusinessAnalysisPack</div>
+        <div style="color: rgba(255,255,255,0.88); font-size: 0.95rem; margin-top: 4px;">
+            제조업 산업·기업 리서치를 검증된 AI Context Pack으로 만듭니다.
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
 if not config.is_configured():
     st.warning("`.env` 파일에 ANTHROPIC_API_KEY와 TAVILY_API_KEY를 설정해야 실행할 수 있습니다. `.env.example`을 복사해서 `.env`로 만드세요.")
@@ -304,15 +314,17 @@ def render_report(target: str, task_results: list[dict]) -> None:
                     st.caption("이 항목은 조사된 내용이 없습니다.")
 
 
-industry = st.selectbox("업종 선택", options=list(schema.INDUSTRY_SCHEMAS.keys()))
-target = st.text_input(
-    "분석 대상 (기업명 또는 산업명)",
-    placeholder=schema.TARGET_PLACEHOLDERS.get(industry, ""),
-)
-include_opportunity = st.checkbox(
-    "고객·Pain Point·비즈니스모델까지 조사 (항목 5개 추가, 시간 더 걸림)"
-)
-run = st.button("리서치 시작", disabled=not target)
+with st.sidebar:
+    st.markdown("### 분석 설정")
+    industry = st.selectbox("업종 선택", options=list(schema.INDUSTRY_SCHEMAS.keys()))
+    target = st.text_input(
+        "분석 대상 (기업명 또는 산업명)",
+        placeholder=schema.TARGET_PLACEHOLDERS.get(industry, ""),
+    )
+    include_opportunity = st.checkbox(
+        "고객·Pain Point·비즈니스모델까지 조사 (항목 5개 추가, 시간 더 걸림)"
+    )
+    run = st.button("리서치 시작", disabled=not target, use_container_width=True)
 
 if run:
     tasks = schema.build_tasks(target, industry=industry, include_opportunity=include_opportunity)
@@ -355,42 +367,43 @@ if st.session_state.get("pack_failures"):
 
 if "pack_md" in st.session_state:
     if st.session_state.get("pack_dart"):
-        render_dart_section(st.session_state["pack_dart"])
-        st.divider()
+        with st.container(border=True):
+            render_dart_section(st.session_state["pack_dart"])
 
-    render_report(st.session_state["pack_target"], st.session_state["pack_task_results"])
+    with st.container(border=True):
+        render_report(st.session_state["pack_target"], st.session_state["pack_task_results"])
 
-    st.divider()
-    st.subheader("AI Context Pack (원본)")
-    st.caption(
-        "이 파일을 ChatGPT나 Claude에 붙여넣고 원하는 걸 요청하면 됩니다. "
-        "예: \"이 자료와 제 이력서를 참고해서 지원동기를 작성해줘\" / "
-        "\"이 자료와 제 제품 아이디어를 참고해서 시장 진입 전략을 짚어줘\""
-    )
-    st.download_button(
-        "Context Pack 다운로드 (.md)",
-        data=st.session_state["pack_md"],
-        file_name=f"businessanalysispack_{st.session_state['pack_target']}.md",
-        mime="text/markdown",
-    )
-    with st.expander("원본 텍스트 보기"):
-        st.markdown(st.session_state["pack_md"])
+    with st.container(border=True):
+        st.subheader("AI Context Pack (원본)")
+        st.caption(
+            "이 파일을 ChatGPT나 Claude에 붙여넣고 원하는 걸 요청하면 됩니다. "
+            "예: \"이 자료와 제 이력서를 참고해서 지원동기를 작성해줘\" / "
+            "\"이 자료와 제 제품 아이디어를 참고해서 시장 진입 전략을 짚어줘\""
+        )
+        st.download_button(
+            "Context Pack 다운로드 (.md)",
+            data=st.session_state["pack_md"],
+            file_name=f"businessanalysispack_{st.session_state['pack_target']}.md",
+            mime="text/markdown",
+        )
+        with st.expander("원본 텍스트 보기"):
+            st.markdown(st.session_state["pack_md"])
 
-    st.divider()
-    st.subheader("이 자료가 도움이 되었나요?")
-    if st.session_state.get("feedback_done"):
-        st.success("피드백 감사합니다!")
-    else:
-        rating = st.feedback("stars")
-        comment = st.text_area("어떤 부분을 개선하면 좋을까요? (선택)")
-        if st.button("피드백 제출", disabled=rating is None):
-            feedback.save(
-                target=st.session_state["pack_target"],
-                rating=rating + 1,
-                comment=comment,
-            )
-            st.session_state["feedback_done"] = True
-            st.rerun()
+    with st.container(border=True):
+        st.subheader("이 자료가 도움이 되었나요?")
+        if st.session_state.get("feedback_done"):
+            st.success("피드백 감사합니다!")
+        else:
+            rating = st.feedback("stars")
+            comment = st.text_area("어떤 부분을 개선하면 좋을까요? (선택)")
+            if st.button("피드백 제출", disabled=rating is None):
+                feedback.save(
+                    target=st.session_state["pack_target"],
+                    rating=rating + 1,
+                    comment=comment,
+                )
+                st.session_state["feedback_done"] = True
+                st.rerun()
 
 with st.expander("관리자: 사용 현황 · 피드백 보기"):
     code = st.text_input("코드 입력", type="password")
