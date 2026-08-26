@@ -15,6 +15,14 @@ SYSTEM_PROMPT = """당신은 반도체 산업 리서치 애널리스트입니다
 - INTERPRETATION: 하나 이상의 FACT를 근거로 한 해석. 근거로 삼은 FACT의 local_id를 반드시 명시.
 - HYPOTHESIS: 검색 결과에 직접 근거가 없는 추정. 추정임을 명확히 표시.
 - DISCREPANCY: 같은 항목에 대해 출처마다 수치·전망이 다르면 하나의 값으로 합치지 말고 각 출처의 값을 그대로 나열.
+- METRICS: 검색 결과에 있는 정량적 수치를 차트로 그릴 수 있도록 별도로 구조화해서 뽑는다 (facts와 별개로, 겹쳐도 됨).
+  - label: 지표명 (예: "매출", "HPC", "TSMC") — 구성비 항목이면 전체가 아니라 개별 구성요소 이름.
+  - value: 숫자만 (단위 텍스트 제외).
+  - unit: 단위 (예: "억 달러", "%", "만 대").
+  - period: 시점 (예: "2025 Q4", "2024년"). 모르면 "미상".
+  - group: 이 수치가 다른 여러 수치와 합쳐서 하나의 구성비(예: 매출 비중, 시장 점유율)를 이루면 그 상위 항목명을 적는다 (예: "TSMC 2025 4Q 매출 비중"). 단일 수치(매출 총액, CAPEX, 성장률 등)면 null.
+  - source_index: 어느 검색 결과에서 가져왔는지.
+  - 시계열 비교나 구성비 파이차트로 그릴 만한 명확한 수치가 없으면 배열을 비워둔다. 억지로 만들어내지 않는다.
 - 검색 결과에 없는 내용은 지어내지 않는다. 관련 정보가 없으면 해당 배열을 비워둔다.
 - 문장 표현: statement는 자연스러운 문장으로 쓴다. INTERPRETATION/HYPOTHESIS라고 해서 모든 문장을 "~로 해석된다", "~로 추정된다", "~할 가능성이 있다"처럼 매번 같은 어미로 끝맺지 않는다. 어떤 성격의 문장인지는 카테고리 자체가 이미 나타내므로, 문장은 그냥 사실을 서술하듯 담백하게 쓴다.
 
@@ -24,7 +32,8 @@ SYSTEM_PROMPT = """당신은 반도체 산업 리서치 애널리스트입니다
   "facts": [{"local_id": "f1", "statement": "...", "source_index": 0, "reference_date": "..."}],
   "discrepancies": [{"local_id": "d1", "topic": "...", "values": [{"source_index": 0, "value": "...", "as_of": "..."}], "note": "..."}],
   "interpretations": [{"local_id": "i1", "statement": "...", "based_on_local_ids": ["f1"]}],
-  "hypotheses": [{"local_id": "h1", "statement": "..."}]
+  "hypotheses": [{"local_id": "h1", "statement": "..."}],
+  "metrics": [{"label": "...", "value": 0.0, "unit": "...", "period": "...", "group": null, "source_index": 0}]
 }"""
 
 
@@ -51,7 +60,7 @@ def extract(task_label: str, target: str, search_results: list[dict]) -> dict:
 
     response = _get_client().messages.create(
         model=config.MODEL,
-        max_tokens=4096,
+        max_tokens=6000,
         thinking={"type": "disabled"},
         system=SYSTEM_PROMPT,
         messages=[{"role": "user", "content": user_prompt}],
@@ -62,7 +71,14 @@ def extract(task_label: str, target: str, search_results: list[dict]) -> dict:
     try:
         return json.loads(raw)
     except json.JSONDecodeError:
-        return {"facts": [], "discrepancies": [], "interpretations": [], "hypotheses": [], "_parse_error": raw}
+        return {
+            "facts": [],
+            "discrepancies": [],
+            "interpretations": [],
+            "hypotheses": [],
+            "metrics": [],
+            "_parse_error": raw,
+        }
 
 
 def warmup() -> None:

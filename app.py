@@ -1,8 +1,12 @@
 import concurrent.futures
 
+import pandas as pd
+import plotly.express as px
 import streamlit as st
 
 from core import config, context_pack, evidence, feedback, llm, schema, search
+
+TIER_COLORS = {"TIER1": "#1f8a5f", "TIER2": "#b8792e", "TIER3": "#7c8990"}
 
 st.set_page_config(page_title="BusinessAnalysisPack", page_icon="🔬", layout="wide")
 
@@ -27,6 +31,99 @@ def run_task(task: dict, target: str, retries: int = 1) -> dict:
         raise
 
 
+def render_tier_overview(task_results: list[dict]) -> None:
+    counts = {"TIER1": 0, "TIER2": 0, "TIER3": 0}
+    for tr in task_results:
+        sources = tr["sources"]
+        for f in tr["data"].get("facts", []):
+            idx = f.get("source_index")
+            if isinstance(idx, int) and 0 <= idx < len(sources) and sources[idx].get("url"):
+                counts[evidence.classify_tier(sources[idx]["url"])] += 1
+
+    total = sum(counts.values())
+    if total == 0:
+        return
+
+    df = pd.DataFrame({"Tier": list(counts.keys()), "개수": list(counts.values())})
+    fig = px.pie(
+        df,
+        names="Tier",
+        values="개수",
+        title=f"출처 신뢰도 분포 (전체 Fact {total}건)",
+        color="Tier",
+        color_discrete_map=TIER_COLORS,
+        hole=0.45,
+    )
+    fig.update_layout(margin=dict(t=40, b=0, l=0, r=0), height=280)
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def render_metrics_section(metrics: list[dict], sources: list[dict]) -> None:
+    rows = []
+    for m in metrics:
+        try:
+            value = float(m.get("value"))
+        except (TypeError, ValueError):
+            continue
+        idx = m.get("source_index")
+        src = sources[idx] if isinstance(idx, int) and 0 <= idx < len(sources) else None
+        rows.append(
+            {
+                "지표": m.get("label", ""),
+                "수치": value,
+                "단위": m.get("unit", ""),
+                "시점": m.get("period", ""),
+                "구성그룹": m.get("group") or "",
+                "출처": src.get("title", "") if src else "",
+            }
+        )
+
+    if not rows:
+        return
+
+    df = pd.DataFrame(rows)
+    st.markdown("**주요 수치**")
+    st.dataframe(df[["지표", "수치", "단위", "시점", "출처"]], use_container_width=True, hide_index=True)
+
+    single_df = df[df["구성그룹"] == ""]
+    for label, group_df in single_df.groupby("지표"):
+        if group_df["시점"].nunique() >= 2:
+            unit = group_df["단위"].iloc[0]
+            fig = px.bar(group_df, x="시점", y="수치", title=f"{label} 추이 ({unit})")
+            fig.update_layout(margin=dict(t=40, b=0, l=0, r=0), height=280)
+            st.plotly_chart(fig, use_container_width=True)
+
+    grouped_df = df[df["구성그룹"] != ""]
+    for group_name, group_df in grouped_df.groupby("구성그룹"):
+        if len(group_df) >= 2:
+            fig = px.pie(group_df, names="지표", values="수치", title=group_name, hole=0.35)
+            fig.update_layout(margin=dict(t=40, b=0, l=0, r=0), height=280)
+            st.plotly_chart(fig, use_container_width=True)
+
+
+def render_discrepancy_table(discrepancies: list[dict], sources: list[dict]) -> None:
+    if not discrepancies:
+        return
+    st.markdown("**⚠️ 자료 간 차이가 있는 부분**")
+    for d in discrepancies:
+        st.markdown(f"_{d.get('topic', '')}_")
+        rows = []
+        for v in d.get("values", []):
+            idx = v.get("source_index")
+            src = sources[idx] if isinstance(idx, int) and 0 <= idx < len(sources) else None
+            rows.append(
+                {
+                    "출처": src.get("title", "출처 미상") if src else "출처 미상",
+                    "수치": v.get("value", ""),
+                    "시점": v.get("as_of", ""),
+                }
+            )
+        if rows:
+            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+        if d.get("note"):
+            st.caption(d["note"])
+
+
 def render_report(target: str, task_results: list[dict]) -> None:
     st.subheader(f"{target} 리포트")
     st.caption("아래 원본 자료(AI Context Pack)를 사람이 읽기 쉽게 정리한 화면입니다. 항목을 눌러 펼쳐보세요.")
@@ -34,6 +131,7 @@ def render_report(target: str, task_results: list[dict]) -> None:
         "**출처 신뢰도** · TIER1: 공시·공공데이터·기업 공식 발표 "
         "· TIER2: 리서치기관·주요 언론 · TIER3: 그 외(블로그, SNS 등 — 별도 확인 권장)"
     )
+    render_tier_overview(task_results)
 
     by_category: dict[str, list[dict]] = {}
     for tr in task_results:
@@ -47,12 +145,15 @@ def render_report(target: str, task_results: list[dict]) -> None:
             interpretations = data.get("interpretations", [])
             facts = data.get("facts", [])
             hypotheses = data.get("hypotheses", [])
+            metrics = data.get("metrics", [])
 
             with st.expander(task["label"]):
                 if interpretations:
                     st.markdown("**핵심 해석**")
                     for i in interpretations:
                         st.markdown(f"- {i.get('statement', '')}")
+
+                render_metrics_section(metrics, sources)
 
                 if facts:
                     st.markdown("**세부 근거**")
@@ -69,14 +170,9 @@ def render_report(target: str, task_results: list[dict]) -> None:
                     for h in hypotheses:
                         st.markdown(f"- {h.get('statement', '')}")
 
-                if discrepancies:
-                    st.markdown("**⚠️ 자료 간 차이가 있는 부분**")
-                    for d in discrepancies:
-                        st.markdown(f"- {d.get('topic', '')}")
-                        if d.get("note"):
-                            st.caption(d["note"])
+                render_discrepancy_table(discrepancies, sources)
 
-                if not (discrepancies or interpretations or facts or hypotheses):
+                if not (discrepancies or interpretations or facts or hypotheses or metrics):
                     st.caption("이 항목은 조사된 내용이 없습니다.")
 
 
