@@ -8,6 +8,15 @@ from core import config, context_pack, evidence, feedback, llm, schema, search, 
 
 TIER_COLORS = {"TIER1": "#1f8a5f", "TIER2": "#b8792e", "TIER3": "#7c8990"}
 
+
+def _render_pie(fig) -> None:
+    # 파이차트는 wide 레이아웃 폭에 맞춰 늘리면 원이 작은 채로 옆에 빈 공간만 커져서
+    # 정사각형에 가까운 고정 크기로 만들고 가운데 열에 배치한다.
+    fig.update_layout(width=420, height=420, margin=dict(t=48, b=10, l=10, r=10))
+    _, center, _ = st.columns([1, 2, 1])
+    with center:
+        st.plotly_chart(fig, use_container_width=False)
+
 st.set_page_config(page_title="BusinessAnalysisPack", page_icon="🔬", layout="wide")
 
 st.title("BusinessAnalysisPack")
@@ -60,8 +69,7 @@ def render_tier_overview(task_results: list[dict]) -> None:
         color_discrete_map=TIER_COLORS,
         hole=0.45,
     )
-    fig.update_layout(margin=dict(t=40, b=0, l=0, r=0), height=280)
-    st.plotly_chart(fig, use_container_width=True)
+    _render_pie(fig)
 
 
 def render_metrics_section(metrics: list[dict], sources: list[dict]) -> None:
@@ -98,15 +106,14 @@ def render_metrics_section(metrics: list[dict], sources: list[dict]) -> None:
             unit = group_df["단위"].iloc[0]
             fig = px.bar(group_df, x="시점", y="수치", title=f"{label} 추이 ({unit})")
             fig.update_xaxes(categoryorder="array", categoryarray=group_df["시점"].tolist())
-            fig.update_layout(margin=dict(t=40, b=0, l=0, r=0), height=280)
+            fig.update_layout(margin=dict(t=40, b=10, l=10, r=10), height=340)
             st.plotly_chart(fig, use_container_width=True)
 
     grouped_df = df[df["구성그룹"] != ""]
     for group_name, group_df in grouped_df.groupby("구성그룹"):
         if len(group_df) >= 2:
             fig = px.pie(group_df, names="지표", values="수치", title=group_name, hole=0.35)
-            fig.update_layout(margin=dict(t=40, b=0, l=0, r=0), height=280)
-            st.plotly_chart(fig, use_container_width=True)
+            _render_pie(fig)
 
 
 def render_discrepancy_table(discrepancies: list[dict], sources: list[dict]) -> None:
