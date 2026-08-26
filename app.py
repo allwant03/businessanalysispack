@@ -22,13 +22,19 @@ MAX_WORKERS = 5
 
 def run_task(task: dict, target: str, retries: int = 1) -> dict:
     try:
-        results = search.search(task["query"])
+        results = search.search(task["query"], time_range=task.get("recency"))
         data = llm.extract(task["label"], target, results)
         return {"task": task, "sources": results, "data": data}
     except Exception:
         if retries > 0:
             return run_task(task, target, retries=retries - 1)
         raise
+
+
+def _sort_key(item: dict) -> tuple:
+    year = item.get("year")
+    quarter = item.get("quarter")
+    return (year if isinstance(year, int) else -1, quarter if isinstance(quarter, int) else 0)
 
 
 def render_tier_overview(task_results: list[dict]) -> None:
@@ -75,6 +81,7 @@ def render_metrics_section(metrics: list[dict], sources: list[dict]) -> None:
                 "시점": m.get("period", ""),
                 "구성그룹": m.get("group") or "",
                 "출처": src.get("title", "") if src else "",
+                "_sort": _sort_key(m),
             }
         )
 
@@ -85,11 +92,12 @@ def render_metrics_section(metrics: list[dict], sources: list[dict]) -> None:
     st.markdown("**주요 수치**")
     st.dataframe(df[["지표", "수치", "단위", "시점", "출처"]], use_container_width=True, hide_index=True)
 
-    single_df = df[df["구성그룹"] == ""]
-    for label, group_df in single_df.groupby("지표"):
+    single_df = df[df["구성그룹"] == ""].sort_values("_sort")
+    for label, group_df in single_df.groupby("지표", sort=False):
         if group_df["시점"].nunique() >= 2:
             unit = group_df["단위"].iloc[0]
             fig = px.bar(group_df, x="시점", y="수치", title=f"{label} 추이 ({unit})")
+            fig.update_xaxes(categoryorder="array", categoryarray=group_df["시점"].tolist())
             fig.update_layout(margin=dict(t=40, b=0, l=0, r=0), height=280)
             st.plotly_chart(fig, use_container_width=True)
 
@@ -156,8 +164,14 @@ def render_report(target: str, task_results: list[dict]) -> None:
                 render_metrics_section(metrics, sources)
 
                 if facts:
-                    st.markdown("**세부 근거**")
-                    for f in facts:
+                    st.markdown("**세부 근거** (최신순)")
+                    sorted_facts = sorted(facts, key=_sort_key, reverse=True)
+                    last_year = None
+                    for f in sorted_facts:
+                        year = f.get("year")
+                        if year != last_year:
+                            st.markdown(f"###### {year}년" if isinstance(year, int) else "###### 시점 미상")
+                            last_year = year
                         st.markdown(f"- {f.get('statement', '')}")
                         idx = f.get("source_index")
                         src = sources[idx] if isinstance(idx, int) and 0 <= idx < len(sources) else None

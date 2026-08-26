@@ -1,4 +1,5 @@
 import json
+from datetime import date
 
 import anthropic
 
@@ -12,6 +13,9 @@ SYSTEM_PROMPT = """당신은 반도체 산업 리서치 애널리스트입니다
 규칙:
 - FACT: 검색 결과에 명시된 수치·사실만 해당. 어느 출처(source_index)에서 가져왔는지 반드시 표시하고, 가능하면 기준 시점을 포함.
   전망·예측 문장은 출처가 있어도 FACT가 아니라 INTERPRETATION 또는 HYPOTHESIS로 분류.
+- 시점 정규화: 모든 FACT와 METRICS 항목에는 year(4자리 정수 연도)를 반드시 채운다. 분기 단위 수치면 quarter(1~4)도 채우고, 아니면 null.
+  "올해", "지난해", "이번 분기"처럼 상대적 표현은 아래 제공되는 오늘 날짜를 기준으로 절대 연도로 환산한다.
+  기사에 명시적 시점이 없으면 그 검색 결과의 발행일을 기준으로 best-guess로 채운다. year를 비우지 않는다.
 - INTERPRETATION: 하나 이상의 FACT를 근거로 한 해석. 근거로 삼은 FACT의 local_id를 반드시 명시.
 - HYPOTHESIS: 검색 결과에 직접 근거가 없는 추정. 추정임을 명확히 표시.
 - DISCREPANCY: 같은 항목에 대해 출처마다 수치·전망이 다르면 하나의 값으로 합치지 말고 각 출처의 값을 그대로 나열.
@@ -29,11 +33,11 @@ SYSTEM_PROMPT = """당신은 반도체 산업 리서치 애널리스트입니다
 아래 JSON 형식으로만 응답한다. 다른 설명 텍스트는 추가하지 않는다.
 
 {
-  "facts": [{"local_id": "f1", "statement": "...", "source_index": 0, "reference_date": "..."}],
+  "facts": [{"local_id": "f1", "statement": "...", "source_index": 0, "reference_date": "...", "year": 2026, "quarter": null}],
   "discrepancies": [{"local_id": "d1", "topic": "...", "values": [{"source_index": 0, "value": "...", "as_of": "..."}], "note": "..."}],
   "interpretations": [{"local_id": "i1", "statement": "...", "based_on_local_ids": ["f1"]}],
   "hypotheses": [{"local_id": "h1", "statement": "..."}],
-  "metrics": [{"label": "...", "value": 0.0, "unit": "...", "period": "...", "group": null, "source_index": 0}]
+  "metrics": [{"label": "...", "value": 0.0, "unit": "...", "period": "...", "year": 2026, "quarter": null, "group": null, "source_index": 0}]
 }"""
 
 
@@ -52,6 +56,7 @@ def extract(task_label: str, target: str, search_results: list[dict]) -> dict:
     )
     user_prompt = f"""조사 항목: {task_label}
 대상: {target}
+오늘 날짜: {date.today().isoformat()}
 
 검색 결과:
 {numbered_sources if numbered_sources else '(검색 결과 없음)'}

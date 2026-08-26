@@ -12,8 +12,11 @@ def _get_client() -> TavilyClient:
     return _client
 
 
-def search(query: str, max_results: int = 5) -> list[dict]:
-    response = _get_client().search(query=query, max_results=max_results, search_depth="advanced")
+def search(query: str, max_results: int = 5, time_range: str | None = None) -> list[dict]:
+    kwargs = {"query": query, "max_results": max_results, "search_depth": "advanced"}
+    if time_range:
+        kwargs["time_range"] = time_range
+    response = _get_client().search(**kwargs)
     return response.get("results", [])
 
 
