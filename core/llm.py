@@ -7,6 +7,24 @@ from . import config
 
 _client = None
 
+
+def _extract_json_object(text: str) -> str:
+    """Claude sometimes appends explanatory prose after the JSON object despite
+    being told not to. Scan for the first balanced {...} block instead of relying
+    on prefix/suffix stripping, so trailing text doesn't break parsing."""
+    start = text.find("{")
+    if start == -1:
+        return text
+    depth = 0
+    for i in range(start, len(text)):
+        if text[i] == "{":
+            depth += 1
+        elif text[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start : i + 1]
+    return text[start:]
+
 SYSTEM_PROMPT = """당신은 제조업 산업 리서치 애널리스트입니다. 주어진 검색 결과만 근거로 사용해 \
 사실(FACT), 해석(INTERPRETATION), 추정(HYPOTHESIS), 출처 간 불일치(DISCREPANCY)를 구분합니다.
 
@@ -81,6 +99,7 @@ def extract(task_label: str, target: str, search_results: list[dict], industry: 
     text_blocks = [block.text for block in response.content if block.type == "text"]
     raw = "".join(text_blocks).strip()
     raw = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+    raw = _extract_json_object(raw)
     try:
         return json.loads(raw)
     except json.JSONDecodeError:
