@@ -142,14 +142,85 @@ BATTERY_SCHEMA = {
     ],
 }
 
+AUTO_PARTS_SCHEMA = {
+    "industry": [
+        {
+            "id": "IND-1",
+            "label": "시장 규모 및 성장률",
+            "query": "{target} 자동차 전장 부품 시장 규모 성장률 전망",
+            "recency": "year",
+        },
+        {
+            "id": "IND-2",
+            "label": "밸류체인 구조 (완성차/Tier1/Tier2)",
+            "query": "{target} 자동차 부품 밸류체인 완성차 OEM Tier1 Tier2 구조",
+            "recency": None,
+        },
+        {
+            "id": "IND-3",
+            "label": "전장 부품 분류 (파워트레인/ADAS·자율주행/인포테인먼트)",
+            "query": "{target} 자동차 전장 파워트레인 ADAS 자율주행 인포테인먼트 기술 동향",
+            "recency": "year",
+        },
+        {
+            "id": "IND-4",
+            "label": "규제 및 무역 이슈",
+            "query": "{target} 자동차 부품 관세 규제 안전 인증 이슈",
+            "recency": "year",
+        },
+    ],
+    "company": [
+        {
+            "id": "CO-1",
+            "label": "사업부별 매출 구조",
+            "query": "{target} 사업부문별 매출 실적",
+            "recency": "year",
+        },
+        {
+            "id": "CO-2",
+            "label": "설비투자(CAPEX) 계획",
+            "query": "{target} CAPEX 설비투자 계획 신규 공장 증설",
+            "recency": "year",
+        },
+        {
+            "id": "CO-3",
+            "label": "주요 제품 포트폴리오",
+            "query": "{target} 주요 제품 라인업",
+            "recency": None,
+        },
+        {
+            "id": "CO-4",
+            "label": "주요 고객사 구조",
+            "query": "{target} 주요 고객사 완성차 매출 의존도",
+            "recency": "year",
+        },
+    ],
+    "competitor": [
+        {
+            "id": "CP-1",
+            "label": "경쟁사 식별 및 비교",
+            "query": "{target} 경쟁사 비교 시장점유율 보쉬 콘티넨탈 덴소 ZF 현대모비스 만도 LG전자 하만",
+            "recency": "year",
+        },
+        {
+            "id": "CP-2",
+            "label": "기술/원가 경쟁력",
+            "query": "{target} 경쟁사 기술 원가 비교 보쉬 콘티넨탈 덴소 ZF 현대모비스 만도 LG전자 하만",
+            "recency": "year",
+        },
+    ],
+}
+
 INDUSTRY_SCHEMAS = {
     "반도체": SEMICONDUCTOR_SCHEMA,
     "2차전지": BATTERY_SCHEMA,
+    "자동차 전장/부품": AUTO_PARTS_SCHEMA,
 }
 
 TARGET_PLACEHOLDERS = {
     "반도체": "예: SK하이닉스",
     "2차전지": "예: LG에너지솔루션",
+    "자동차 전장/부품": "예: 현대모비스",
 }
 
 # 선택 항목: 산업/기업/경쟁사 분석에서 한 걸음 더 들어가 고객·Pain Point·비즈니스모델까지 조사한다.
