@@ -259,18 +259,63 @@ OPPORTUNITY_SCHEMA = [
     },
 ]
 
+# 선택 항목: 이 회사를 협력사·거래 상대방으로 볼 때의 평가 기준(재무건전성/가격·원가/납기/품질·리스크/
+# 기존 거래처 구조). 구매뿐 아니라 영업(고객사 분석)·전략기획(M&A·제휴 후보 평가)·투자심사·공모전(소싱
+# 파트너 선정)처럼 "이 회사와 거래·제휴할지 판단해야 하는" 모든 상황에 쓰일 수 있어 업종에 상관없이
+# 재사용 가능한 범용 문항으로 둔다.
+PARTNER_EVALUATION_SCHEMA = [
+    {
+        "id": "PE-1",
+        "label": "재무건전성",
+        "query": "{target} 재무건전성 신용등급 부채비율 유동비율",
+        "recency": "year",
+    },
+    {
+        "id": "PE-2",
+        "label": "가격/원가 경쟁력",
+        "query": "{target} 가격 원가 경쟁력 단가 협상력",
+        "recency": "year",
+    },
+    {
+        "id": "PE-3",
+        "label": "생산능력 및 납기 안정성",
+        "query": "{target} 생산능력 CAPA 납기 공급 안정성 리드타임",
+        "recency": "year",
+    },
+    {
+        "id": "PE-4",
+        "label": "품질·인증 및 거래 리스크",
+        "query": "{target} 품질 인증 리콜 소송 규제 리스크",
+        "recency": "year",
+    },
+    {
+        "id": "PE-5",
+        "label": "기존 거래처 및 파트너십 구조",
+        "query": "{target} 주요 거래처 고객사 파트너십 공급계약",
+        "recency": "year",
+    },
+]
+
 CATEGORY_LABELS = {
     "industry": "산업",
     "company": "기업",
     "competitor": "경쟁사",
     "opportunity": "사업기회",
+    "partner": "협력사 평가",
 }
 
 
-def build_tasks(target: str, industry: str = "반도체", include_opportunity: bool = False) -> list[dict]:
+def build_tasks(
+    target: str,
+    industry: str = "반도체",
+    include_opportunity: bool = False,
+    include_partner_eval: bool = False,
+) -> list[dict]:
     schema_dict = dict(INDUSTRY_SCHEMAS[industry])
     if include_opportunity:
         schema_dict["opportunity"] = OPPORTUNITY_SCHEMA
+    if include_partner_eval:
+        schema_dict["partner"] = PARTNER_EVALUATION_SCHEMA
 
     tasks = []
     for category, items in schema_dict.items():

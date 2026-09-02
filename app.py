@@ -331,12 +331,21 @@ with st.sidebar:
         compare_targets: list[str] = []
         compare_run = False
     else:
+        compare_lens = st.radio(
+            "비교 관점",
+            ["종합 비교", "협력사·파트너 평가"],
+            help="종합 비교: 매출구조·CAPEX·경쟁사(점유율) / 협력사·파트너 평가: 재무건전성·가격경쟁력·"
+            "생산능력·납기·품질리스크·기존 거래처 — 구매뿐 아니라 영업·전략기획·투자심사에도 씁니다.",
+        )
         compare_input = st.text_input(
             "비교할 기업 (쉼표로 구분, 2~3개)",
             placeholder=f"예: {schema.TARGET_PLACEHOLDERS.get(industry, '')}, ...",
         )
         compare_targets = [t.strip() for t in compare_input.split(",") if t.strip()][:3]
-        st.caption("사업부별 매출 구조 · CAPEX · 경쟁사 비교(시장점유율 포함) 항목만 비교해서 빠르게 확인합니다.")
+        if compare_lens == "종합 비교":
+            st.caption("사업부별 매출 구조 · CAPEX · 경쟁사 비교(시장점유율 포함) 항목만 비교해서 빠르게 확인합니다.")
+        else:
+            st.caption("재무건전성 · 가격/원가 경쟁력 · 생산능력·납기 · 품질·리스크 · 기존 거래처 항목을 비교합니다.")
         compare_run = st.button(
             "비교 시작", disabled=not (2 <= len(compare_targets) <= 3), use_container_width=True
         )
@@ -382,15 +391,18 @@ if run:
 if compare_run:
     search.warmup()
     llm.warmup()
+    partner_lens = compare_lens == "협력사·파트너 평가"
+    compare_task_ids = compare.PARTNER_TASK_IDS if partner_lens else compare.COMPARISON_TASK_IDS
     company_results: dict[str, list[dict]] = {c: [] for c in compare_targets}
     compare_failures: list[tuple[str, str, str]] = []
-    total_tasks = len(compare_targets) * len(compare.COMPARISON_TASK_IDS)
+    total_tasks = len(compare_targets) * len(compare_task_ids)
     progress = st.progress(0.0, text="비교 조사 준비 중...")
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
         futures = {}
         for company in compare_targets:
-            tasks = [t for t in schema.build_tasks(company, industry=industry) if t["id"] in compare.COMPARISON_TASK_IDS]
+            all_tasks = schema.build_tasks(company, industry=industry, include_partner_eval=partner_lens)
+            tasks = [t for t in all_tasks if t["id"] in compare_task_ids]
             for task in tasks:
                 futures[executor.submit(run_task, task, company, industry)] = (company, task)
 
@@ -407,6 +419,7 @@ if compare_run:
     st.session_state["compare_results"] = company_results
     st.session_state["compare_targets"] = compare_targets
     st.session_state["compare_failures"] = compare_failures
+    st.session_state["compare_lens"] = compare_lens
     progress.empty()
 
 if st.session_state.get("pack_failures"):
@@ -420,8 +433,12 @@ if st.session_state.get("compare_failures"):
 if "compare_results" in st.session_state:
     with st.container(border=True):
         targets_label = " vs ".join(st.session_state["compare_targets"])
-        st.subheader(f"{targets_label} 비교")
-        st.caption("사업부별 매출 구조 · CAPEX · 경쟁사 비교 항목만 돌린 결과입니다. 전체 리포트는 '단일 기업 분석' 모드를 이용하세요.")
+        lens_label = st.session_state.get("compare_lens", "종합 비교")
+        st.subheader(f"{targets_label} 비교 ({lens_label})")
+        if lens_label == "협력사·파트너 평가":
+            st.caption("재무건전성 · 가격/원가 경쟁력 · 생산능력·납기 · 품질·리스크 · 기존 거래처 항목만 돌린 결과입니다. 전체 리포트는 '단일 기업 분석' 모드를 이용하세요.")
+        else:
+            st.caption("사업부별 매출 구조 · CAPEX · 경쟁사 비교 항목만 돌린 결과입니다. 전체 리포트는 '단일 기업 분석' 모드를 이용하세요.")
 
         table = compare.build_comparison_table(st.session_state["compare_results"])
         if not table.empty:

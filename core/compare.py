@@ -1,8 +1,11 @@
 import pandas as pd
 
 # 기업 비교 모드에서는 전체 스키마를 다 돌리면 기업 수만큼 API 호출이 배로 늘어나므로,
-# 비교에 실제로 쓰이는 핵심 항목(매출구조/CAPEX/경쟁사 비교=시장점유율 포함)만 돌린다.
+# 비교에 실제로 쓰이는 핵심 항목만 골라서 돌린다. 두 가지 비교 관점을 지원한다:
+# - 종합 비교: 매출구조/CAPEX/경쟁사 비교(시장점유율 포함)
+# - 협력사·파트너 평가: 재무건전성/가격·원가/생산능력·납기/품질·리스크/기존 거래처 구조
 COMPARISON_TASK_IDS = {"CO-1", "CO-2", "CP-1"}
+PARTNER_TASK_IDS = {"PE-1", "PE-2", "PE-3", "PE-4", "PE-5"}
 
 
 def build_comparison_table(compare_results: dict[str, list[dict]]) -> pd.DataFrame:
