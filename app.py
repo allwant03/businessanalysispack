@@ -416,10 +416,27 @@ if compare_run:
                 compare_failures.append((company, task["label"], str(e)))
             progress.progress(done / total_tasks, text=f"비교 조사 {done}/{total_tasks}")
 
+    progress.progress(1.0, text="종합 판단 작성 중...")
+    verdicts: dict[str, str] = {}
+    for company, results in company_results.items():
+        task_summaries = [
+            {
+                "label": tr["task"]["label"],
+                "interpretations": tr["data"].get("interpretations", []),
+                "facts": tr["data"].get("facts", []),
+            }
+            for tr in results
+        ]
+        try:
+            verdicts[company] = llm.synthesize_verdict(company, industry, compare_lens, task_summaries)
+        except Exception:
+            verdicts[company] = ""
+
     st.session_state["compare_results"] = company_results
     st.session_state["compare_targets"] = compare_targets
     st.session_state["compare_failures"] = compare_failures
     st.session_state["compare_lens"] = compare_lens
+    st.session_state["compare_verdicts"] = verdicts
     progress.empty()
 
 if st.session_state.get("pack_failures"):
@@ -439,6 +456,15 @@ if "compare_results" in st.session_state:
             st.caption("재무건전성 · 가격/원가 경쟁력 · 생산능력·납기 · 품질·리스크 · 기존 거래처 항목만 돌린 결과입니다. 전체 리포트는 '단일 기업 분석' 모드를 이용하세요.")
         else:
             st.caption("사업부별 매출 구조 · CAPEX · 경쟁사 비교 항목만 돌린 결과입니다. 전체 리포트는 '단일 기업 분석' 모드를 이용하세요.")
+
+        verdicts = st.session_state.get("compare_verdicts", {})
+        if any(verdicts.values()):
+            st.markdown("**종합 판단**")
+            for company in st.session_state["compare_targets"]:
+                v = verdicts.get(company)
+                if v:
+                    st.markdown(f"**{company}** — {v}")
+            st.divider()
 
         table = compare.build_comparison_table(st.session_state["compare_results"])
         if not table.empty:

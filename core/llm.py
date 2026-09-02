@@ -117,6 +117,50 @@ def extract(task_label: str, target: str, search_results: list[dict], industry: 
         }
 
 
+VERDICT_SYSTEM_PROMPT = """당신은 구매팀 소속 애널리스트입니다. 주어진 조사 결과 요약만 근거로, 이 회사를 협력사·거래상대방 \
+후보로서 종합 평가하는 2~4문장의 짧은 코멘트를 작성합니다.
+
+규칙:
+- 강점과 약점(리스크)을 반드시 함께 언급한다. 강점만 나열하지 않는다.
+- "~로 판단된다", "다만 ~" 처럼 실제 구매팀 보고서에 쓰는 자연스러운 어조로 쓴다.
+  예: "OOO는 재무·수익성 항목에서 우수하나, 특정 고객사 매출 의존도가 높아 협상력 관점에서는 모니터링이 필요하다."
+- 주어진 요약 내용에 없는 사실을 지어내지 않는다. 항목별 요약이 비어 있으면 그 항목은 평가에서 제외한다.
+- 순수 텍스트로만 응답한다. JSON, 마크다운, 글머리 기호를 쓰지 않는다."""
+
+
+def synthesize_verdict(target: str, industry: str, lens_label: str, task_summaries: list[dict]) -> str:
+    """이미 추출된 facts/interpretations만 재료로 회사 하나에 대한 종합 판단 코멘트를 만든다.
+    검색을 다시 하지 않으므로 비교 대상 회사 수만큼만 호출이 늘어난다(항목 수와 무관)."""
+    sections = []
+    for ts in task_summaries:
+        interp = " ".join(i.get("statement", "") for i in ts.get("interpretations", []))
+        facts = "; ".join(f.get("statement", "") for f in ts.get("facts", [])[:3])
+        if interp or facts:
+            sections.append(f"[{ts['label']}]\n해석: {interp or '(없음)'}\n주요 사실: {facts or '(없음)'}")
+
+    if not sections:
+        return ""
+
+    user_prompt = f"""업종: {industry}
+대상: {target}
+비교 관점: {lens_label}
+
+항목별 조사 요약:
+{chr(10).join(sections)}
+
+위 요약만 근거로 종합 판단 코멘트를 작성하세요."""
+
+    response = _get_client().messages.create(
+        model=config.MODEL,
+        max_tokens=500,
+        thinking={"type": "disabled"},
+        system=VERDICT_SYSTEM_PROMPT,
+        messages=[{"role": "user", "content": user_prompt}],
+    )
+    text_blocks = [block.text for block in response.content if block.type == "text"]
+    return "".join(text_blocks).strip()
+
+
 def warmup() -> None:
     """Force client creation on the main thread before fan-out to worker threads."""
     _get_client()
