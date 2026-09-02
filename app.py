@@ -6,7 +6,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from core import config, context_pack, dart, evidence, feedback, llm, schema, search, usage
+from core import compare, config, context_pack, dart, evidence, feedback, llm, schema, search, usage
 
 TIER_COLORS = {"TIER1": "#1f8a5f", "TIER2": "#b8792e", "TIER3": "#7c8990"}
 
@@ -316,15 +316,33 @@ def render_report(target: str, task_results: list[dict]) -> None:
 
 with st.sidebar:
     st.markdown("### 분석 설정")
+    mode = st.radio("모드", ["단일 기업 분석", "기업 비교"], horizontal=True)
     industry = st.selectbox("업종 선택", options=list(schema.INDUSTRY_SCHEMAS.keys()))
-    target = st.text_input(
-        "분석 대상 (기업명 또는 산업명)",
-        placeholder=schema.TARGET_PLACEHOLDERS.get(industry, ""),
-    )
-    include_opportunity = st.checkbox(
-        "고객·Pain Point·비즈니스모델까지 조사 (항목 5개 추가, 시간 더 걸림)"
-    )
-    run = st.button("리서치 시작", disabled=not target, use_container_width=True)
+
+    if mode == "단일 기업 분석":
+        target = st.text_input(
+            "분석 대상 (기업명 또는 산업명)",
+            placeholder=schema.TARGET_PLACEHOLDERS.get(industry, ""),
+        )
+        include_opportunity = st.checkbox(
+            "고객·Pain Point·비즈니스모델까지 조사 (항목 5개 추가, 시간 더 걸림)"
+        )
+        run = st.button("리서치 시작", disabled=not target, use_container_width=True)
+        compare_targets: list[str] = []
+        compare_run = False
+    else:
+        compare_input = st.text_input(
+            "비교할 기업 (쉼표로 구분, 2~3개)",
+            placeholder=f"예: {schema.TARGET_PLACEHOLDERS.get(industry, '')}, ...",
+        )
+        compare_targets = [t.strip() for t in compare_input.split(",") if t.strip()][:3]
+        st.caption("사업부별 매출 구조 · CAPEX · 경쟁사 비교(시장점유율 포함) 항목만 비교해서 빠르게 확인합니다.")
+        compare_run = st.button(
+            "비교 시작", disabled=not (2 <= len(compare_targets) <= 3), use_container_width=True
+        )
+        target = None
+        include_opportunity = False
+        run = False
 
 if run:
     tasks = schema.build_tasks(target, industry=industry, include_opportunity=include_opportunity)
@@ -361,9 +379,67 @@ if run:
     usage.log_run(target, len(tasks), len(failures))
     progress.empty()
 
+if compare_run:
+    search.warmup()
+    llm.warmup()
+    company_results: dict[str, list[dict]] = {c: [] for c in compare_targets}
+    compare_failures: list[tuple[str, str, str]] = []
+    total_tasks = len(compare_targets) * len(compare.COMPARISON_TASK_IDS)
+    progress = st.progress(0.0, text="비교 조사 준비 중...")
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        futures = {}
+        for company in compare_targets:
+            tasks = [t for t in schema.build_tasks(company, industry=industry) if t["id"] in compare.COMPARISON_TASK_IDS]
+            for task in tasks:
+                futures[executor.submit(run_task, task, company, industry)] = (company, task)
+
+        done = 0
+        for future in concurrent.futures.as_completed(futures):
+            company, task = futures[future]
+            done += 1
+            try:
+                company_results[company].append(future.result())
+            except Exception as e:
+                compare_failures.append((company, task["label"], str(e)))
+            progress.progress(done / total_tasks, text=f"비교 조사 {done}/{total_tasks}")
+
+    st.session_state["compare_results"] = company_results
+    st.session_state["compare_targets"] = compare_targets
+    st.session_state["compare_failures"] = compare_failures
+    progress.empty()
+
 if st.session_state.get("pack_failures"):
     for label, err in st.session_state["pack_failures"]:
         st.warning(f"'{label}' 조사 중 오류가 발생해 이 항목은 Context Pack에서 제외됐습니다: {err}")
+
+if st.session_state.get("compare_failures"):
+    for company, label, err in st.session_state["compare_failures"]:
+        st.warning(f"'{company}' - '{label}' 조사 중 오류가 발생해 이 항목은 비교표에서 제외됐습니다: {err}")
+
+if "compare_results" in st.session_state:
+    with st.container(border=True):
+        targets_label = " vs ".join(st.session_state["compare_targets"])
+        st.subheader(f"{targets_label} 비교")
+        st.caption("사업부별 매출 구조 · CAPEX · 경쟁사 비교 항목만 돌린 결과입니다. 전체 리포트는 '단일 기업 분석' 모드를 이용하세요.")
+
+        table = compare.build_comparison_table(st.session_state["compare_results"])
+        if not table.empty:
+            st.markdown("**핵심 수치 비교**")
+            st.dataframe(table, use_container_width=True, key="compare_metrics_table")
+        else:
+            st.caption("비교 가능한 수치가 추출되지 않았습니다.")
+
+        st.markdown("**기업별 요약**")
+        cols = st.columns(len(st.session_state["compare_targets"]))
+        for col, company in zip(cols, st.session_state["compare_targets"]):
+            with col:
+                st.markdown(f"**{company}**")
+                for tr in st.session_state["compare_results"].get(company, []):
+                    interpretations = tr["data"].get("interpretations", [])
+                    if interpretations:
+                        st.markdown(f"_{tr['task']['label']}_")
+                        st.markdown(" ".join(i.get("statement", "") for i in interpretations))
 
 if "pack_md" in st.session_state:
     if st.session_state.get("pack_dart"):
