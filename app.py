@@ -87,6 +87,7 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+st.caption("공개된 뉴스·공시 기반 일반 리서치용입니다. 진행 중인 내부 프로젝트·협상 정보는 입력하지 마세요.")
 
 if not config.is_configured():
     st.warning("`.env` 파일에 ANTHROPIC_API_KEY와 TAVILY_API_KEY를 설정해야 실행할 수 있습니다. `.env.example`을 복사해서 `.env`로 만드세요.")
