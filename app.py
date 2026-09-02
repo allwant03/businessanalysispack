@@ -339,7 +339,7 @@ with st.sidebar:
         )
         compare_input = st.text_input(
             "비교할 기업 (쉼표로 구분, 2~3개)",
-            placeholder=f"예: {schema.TARGET_PLACEHOLDERS.get(industry, '')}, ...",
+            placeholder=f"{schema.TARGET_PLACEHOLDERS.get(industry, '')}, ...",
         )
         compare_targets = [t.strip() for t in compare_input.split(",") if t.strip()][:3]
         if compare_lens == "종합 비교":
