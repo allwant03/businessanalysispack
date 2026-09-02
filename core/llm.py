@@ -161,6 +161,50 @@ def synthesize_verdict(target: str, industry: str, lens_label: str, task_summari
     return "".join(text_blocks).strip()
 
 
+DISCOVERY_SYSTEM_PROMPT = """당신은 구매팀 소속 애널리스트입니다. 주어진 검색 결과에서, 사용자가 설명한 부품·기술·서비스를 \
+실제로 공급할 수 있는 기업명을 찾아 후보 리스트로 정리합니다.
+
+규칙:
+- 검색 결과에 실제로 등장하는 기업명만 사용한다. 지어내지 않는다.
+- 각 후보마다 왜 후보로 적합한지 한 문장으로 근거를 쓰고, 어느 출처(source_index)에서 나왔는지 표시한다.
+- 같은 기업이 여러 출처에 등장하면 하나로 합친다.
+- 부품·기술·서비스와 무관한 기업(단순히 같은 업종 유명 대기업이라는 이유만으로)은 포함하지 않는다.
+- 후보를 찾지 못하면 candidates 배열을 비워둔다. 억지로 채우지 않는다.
+
+아래 JSON 형식으로만 응답한다. 다른 설명 텍스트는 추가하지 않는다.
+{"candidates": [{"name": "...", "reason": "...", "source_index": 0}]}"""
+
+
+def discover_suppliers(description: str, industry: str, search_results: list[dict]) -> dict:
+    numbered_sources = "\n\n".join(
+        f"[{i}] {r.get('title', '')}\nURL: {r.get('url', '')}\n내용: {r.get('content', '')[:1200]}"
+        for i, r in enumerate(search_results)
+    )
+    user_prompt = f"""업종: {industry}
+찾는 부품/기술/서비스: {description}
+
+검색 결과:
+{numbered_sources if numbered_sources else '(검색 결과 없음)'}
+
+위 검색 결과만 근거로 JSON을 생성하세요."""
+
+    response = _get_client().messages.create(
+        model=config.MODEL,
+        max_tokens=4000,
+        thinking={"type": "disabled"},
+        system=DISCOVERY_SYSTEM_PROMPT,
+        messages=[{"role": "user", "content": user_prompt}],
+    )
+    text_blocks = [block.text for block in response.content if block.type == "text"]
+    raw = "".join(text_blocks).strip()
+    raw = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+    raw = _extract_json_object(raw)
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return {"candidates": [], "_parse_error": raw}
+
+
 def warmup() -> None:
     """Force client creation on the main thread before fan-out to worker threads."""
     _get_client()

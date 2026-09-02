@@ -286,8 +286,8 @@ PARTNER_EVALUATION_SCHEMA = [
     },
     {
         "id": "PE-4",
-        "label": "품질 및 거래 리스크",
-        "query": "{target} 품질 클레임 불량률 인증 리콜 소송 규제 리스크",
+        "label": "품질·오너 리스크",
+        "query": "{target} 품질 클레임 불량률 인증 리콜 오너 리스크 경영권 분쟁 횡령 배임 소송 규제",
         "recency": "year",
     },
     {

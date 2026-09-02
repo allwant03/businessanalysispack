@@ -316,8 +316,13 @@ def render_report(target: str, task_results: list[dict]) -> None:
 
 with st.sidebar:
     st.markdown("### 분석 설정")
-    mode = st.radio("모드", ["단일 기업 분석", "기업 비교"], horizontal=True)
+    mode = st.radio("모드", ["단일 기업 분석", "기업 비교", "협력사 발굴"], horizontal=True)
     industry = st.selectbox("업종 선택", options=list(schema.INDUSTRY_SCHEMAS.keys()))
+
+    compare_targets: list[str] = []
+    compare_run = False
+    discover_run = False
+    discover_description = ""
 
     if mode == "단일 기업 분석":
         target = st.text_input(
@@ -328,9 +333,7 @@ with st.sidebar:
             "고객·Pain Point·비즈니스모델까지 조사 (항목 5개 추가, 시간 더 걸림)"
         )
         run = st.button("리서치 시작", disabled=not target, use_container_width=True)
-        compare_targets: list[str] = []
-        compare_run = False
-    else:
+    elif mode == "기업 비교":
         compare_lens = st.radio(
             "비교 관점",
             ["종합 비교", "협력사·파트너 평가"],
@@ -345,10 +348,20 @@ with st.sidebar:
         if compare_lens == "종합 비교":
             st.caption("사업부별 매출 구조 · CAPEX · 경쟁사 비교(시장점유율 포함) 항목만 비교해서 빠르게 확인합니다.")
         else:
-            st.caption("재무건전성 · 수익성/원가구조 · 개발능력/기술대응력 · 품질·리스크 · 고객포트폴리오/매출의존도 항목을 비교합니다.")
+            st.caption("재무건전성 · 수익성/원가구조 · 개발능력/기술대응력 · 품질·오너 리스크 · 고객포트폴리오/매출의존도 항목을 비교합니다.")
         compare_run = st.button(
             "비교 시작", disabled=not (2 <= len(compare_targets) <= 3), use_container_width=True
         )
+        target = None
+        include_opportunity = False
+        run = False
+    else:  # 협력사 발굴
+        discover_description = st.text_input(
+            "찾고 있는 부품·기술·서비스",
+            placeholder="예: 차량용 배터리프레임 제작, 8인치 파운드리 위탁생산",
+        )
+        st.caption("이미 아는 회사를 평가하는 게 아니라, 이 부품/기술을 다룰 수 있는 새 후보 기업을 검색으로 찾아줍니다.")
+        discover_run = st.button("후보 찾기", disabled=not discover_description, use_container_width=True)
         target = None
         include_opportunity = False
         run = False
@@ -439,6 +452,17 @@ if compare_run:
     st.session_state["compare_verdicts"] = verdicts
     progress.empty()
 
+if discover_run:
+    search.warmup()
+    llm.warmup()
+    with st.spinner("후보 기업 검색 중..."):
+        discover_query = f"{discover_description} 제작 업체 공급 기업"
+        discover_results = search.search(discover_query, time_range=None)
+        discover_data = llm.discover_suppliers(discover_description, industry, discover_results)
+    st.session_state["discover_description"] = discover_description
+    st.session_state["discover_data"] = discover_data
+    st.session_state["discover_sources"] = discover_results
+
 if st.session_state.get("pack_failures"):
     for label, err in st.session_state["pack_failures"]:
         st.warning(f"'{label}' 조사 중 오류가 발생해 이 항목은 Context Pack에서 제외됐습니다: {err}")
@@ -453,7 +477,7 @@ if "compare_results" in st.session_state:
         lens_label = st.session_state.get("compare_lens", "종합 비교")
         st.subheader(f"{targets_label} 비교 ({lens_label})")
         if lens_label == "협력사·파트너 평가":
-            st.caption("재무건전성 · 수익성/원가구조 · 개발능력/기술대응력 · 품질·리스크 · 고객포트폴리오/매출의존도 항목만 돌린 결과입니다. 전체 리포트는 '단일 기업 분석' 모드를 이용하세요.")
+            st.caption("재무건전성 · 수익성/원가구조 · 개발능력/기술대응력 · 품질·오너 리스크 · 고객포트폴리오/매출의존도 항목만 돌린 결과입니다. 전체 리포트는 '단일 기업 분석' 모드를 이용하세요.")
             st.warning(
                 "⚠️ 공개된 뉴스·재무공시 기반의 **1차 스크리닝 참고용**입니다. 실제 협력사 선정에 필요한 "
                 "원가표준 대비 견적 비교, 비상장 협력사 재무 확인, 현장 실사 등 최종 단계 검증은 포함하지 않습니다."
@@ -487,6 +511,26 @@ if "compare_results" in st.session_state:
                     if interpretations:
                         st.markdown(f"_{tr['task']['label']}_")
                         st.markdown(" ".join(i.get("statement", "") for i in interpretations))
+
+if "discover_data" in st.session_state:
+    with st.container(border=True):
+        st.subheader(f"'{st.session_state['discover_description']}' 협력사 후보")
+        st.caption(
+            "검색으로 찾은 후보입니다 — 이미 아는 회사를 평가하는 게 아니라 새 후보를 발굴하는 용도라, "
+            "이름이 낯설거나 오탐(관련 없는 기업)이 섞일 수 있습니다. 후보를 추린 뒤에는 '기업 비교' 모드로 넘어가 검증하세요."
+        )
+        candidates = st.session_state["discover_data"].get("candidates", [])
+        sources = st.session_state.get("discover_sources", [])
+        if not candidates:
+            st.caption("검색 결과에서 뚜렷한 후보 기업을 찾지 못했습니다. 설명을 더 구체적으로 바꿔서 다시 시도해보세요.")
+        for c in candidates:
+            idx = c.get("source_index")
+            src = sources[idx] if isinstance(idx, int) and 0 <= idx < len(sources) else None
+            st.markdown(f"**{c.get('name', '')}**")
+            st.markdown(c.get("reason", ""))
+            if src and src.get("url"):
+                tier = evidence.classify_tier(src["url"])
+                st.markdown(_source_line(src, tier), unsafe_allow_html=True)
 
 if "pack_md" in st.session_state:
     if st.session_state.get("pack_dart"):
