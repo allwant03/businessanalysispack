@@ -345,7 +345,7 @@ with st.sidebar:
         if compare_lens == "종합 비교":
             st.caption("사업부별 매출 구조 · CAPEX · 경쟁사 비교(시장점유율 포함) 항목만 비교해서 빠르게 확인합니다.")
         else:
-            st.caption("재무건전성 · 가격/원가 경쟁력 · 생산능력·납기 · 품질·리스크 · 기존 거래처 항목을 비교합니다.")
+            st.caption("재무건전성 · 수익성/원가구조 · 개발능력/기술대응력 · 품질·리스크 · 고객포트폴리오/매출의존도 항목을 비교합니다.")
         compare_run = st.button(
             "비교 시작", disabled=not (2 <= len(compare_targets) <= 3), use_container_width=True
         )
@@ -453,7 +453,11 @@ if "compare_results" in st.session_state:
         lens_label = st.session_state.get("compare_lens", "종합 비교")
         st.subheader(f"{targets_label} 비교 ({lens_label})")
         if lens_label == "협력사·파트너 평가":
-            st.caption("재무건전성 · 가격/원가 경쟁력 · 생산능력·납기 · 품질·리스크 · 기존 거래처 항목만 돌린 결과입니다. 전체 리포트는 '단일 기업 분석' 모드를 이용하세요.")
+            st.caption("재무건전성 · 수익성/원가구조 · 개발능력/기술대응력 · 품질·리스크 · 고객포트폴리오/매출의존도 항목만 돌린 결과입니다. 전체 리포트는 '단일 기업 분석' 모드를 이용하세요.")
+            st.warning(
+                "⚠️ 공개된 뉴스·재무공시 기반의 **1차 스크리닝 참고용**입니다. 실제 협력사 선정에 필요한 "
+                "원가표준 대비 견적 비교, 비상장 협력사 재무 확인, 현장 실사 등 최종 단계 검증은 포함하지 않습니다."
+            )
         else:
             st.caption("사업부별 매출 구조 · CAPEX · 경쟁사 비교 항목만 돌린 결과입니다. 전체 리포트는 '단일 기업 분석' 모드를 이용하세요.")
 
