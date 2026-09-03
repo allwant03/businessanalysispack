@@ -6,7 +6,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from core import compare, config, context_pack, dart, evidence, feedback, llm, schema, search, usage
+from core import compare, config, context_pack, dart, dart_score, evidence, feedback, llm, schema, search, usage
 
 TIER_COLORS = {"TIER1": "#1f8a5f", "TIER2": "#b8792e", "TIER3": "#7c8990"}
 
@@ -337,19 +337,27 @@ with st.sidebar:
     elif mode == "기업 비교":
         compare_lens = st.radio(
             "비교 관점",
-            ["종합 비교", "협력사·파트너 평가"],
+            ["종합 비교", "협력사·파트너 평가", "재무 스코어링 (DART)"],
             help="종합 비교: 매출구조·CAPEX·경쟁사(점유율) / 협력사·파트너 평가: 재무건전성·가격경쟁력·"
-            "생산능력·납기·품질리스크·기존 거래처 — 구매뿐 아니라 영업·전략기획·투자심사에도 씁니다.",
+            "생산능력·납기·품질리스크·기존 거래처 — 구매뿐 아니라 영업·전략기획·투자심사에도 씁니다. / "
+            "재무 스코어링(DART): 웹검색·AI 없이 DART 공시 재무제표만으로 가중치 조절 가능한 정량 순위를 매깁니다 "
+            "(상장사만 가능).",
         )
         compare_input = st.text_input(
             "비교할 기업 (쉼표로 구분, 2~3개)",
             placeholder=f"{schema.TARGET_PLACEHOLDERS.get(industry, '')}, ...",
         )
         compare_targets = [t.strip() for t in compare_input.split(",") if t.strip()][:3]
+        score_weights: dict[str, float] = {}
         if compare_lens == "종합 비교":
             st.caption("사업부별 매출 구조 · CAPEX · 경쟁사 비교(시장점유율 포함) 항목만 비교해서 빠르게 확인합니다.")
-        else:
+        elif compare_lens == "협력사·파트너 평가":
             st.caption("재무건전성 · 수익성/원가구조 · 개발능력/기술대응력 · 품질·오너 리스크 · 고객포트폴리오/매출의존도 항목을 비교합니다.")
+        else:
+            st.caption("유동비율 · 부채비율 · 영업이익률 · 순이익률을 DART 공시로 계산해 min-max 정규화 후 가중합으로 점수를 매깁니다. 상장사(또는 사업보고서 제출대상)만 가능합니다.")
+            with st.expander("가중치 조절 (기본: 균등)"):
+                for m in dart_score.FINANCIAL_SCORE_METRICS:
+                    score_weights[m["key"]] = st.slider(m["key"], 0, 100, m["default_weight"], key=f"weight_{m['key']}")
         compare_run = st.button(
             "비교 시작", disabled=not (2 <= len(compare_targets) <= 3), use_container_width=True
         )
@@ -402,7 +410,14 @@ if run:
     usage.log_run(target, len(tasks), len(failures))
     progress.empty()
 
-if compare_run:
+if compare_run and compare_lens == "재무 스코어링 (DART)":
+    with st.spinner("DART 재무제표 조회 중..."):
+        report = dart_score.build_score_report(compare_targets, date.today().year, weights=score_weights)
+    st.session_state["dart_score_report"] = report
+    st.session_state["dart_score_targets"] = compare_targets
+    st.session_state.pop("compare_results", None)
+
+if compare_run and compare_lens != "재무 스코어링 (DART)":
     search.warmup()
     llm.warmup()
     partner_lens = compare_lens == "협력사·파트너 평가"
@@ -451,6 +466,7 @@ if compare_run:
     st.session_state["compare_failures"] = compare_failures
     st.session_state["compare_lens"] = compare_lens
     st.session_state["compare_verdicts"] = verdicts
+    st.session_state.pop("dart_score_report", None)
     progress.empty()
 
 if discover_run:
@@ -471,6 +487,35 @@ if st.session_state.get("pack_failures"):
 if st.session_state.get("compare_failures"):
     for company, label, err in st.session_state["compare_failures"]:
         st.warning(f"'{company}' - '{label}' 조사 중 오류가 발생해 이 항목은 비교표에서 제외됐습니다: {err}")
+
+if "dart_score_report" in st.session_state:
+    with st.container(border=True):
+        report = st.session_state["dart_score_report"]
+        targets_label = " vs ".join(st.session_state["dart_score_targets"])
+        st.subheader(f"{targets_label} 재무 스코어링 (DART)")
+        st.caption("DART 공시 재무제표만 사용 — 웹검색·AI 추출 없이 계산된 수치입니다. 상장사(또는 사업보고서 제출대상)만 가능합니다.")
+
+        if report["missing"]:
+            st.warning(
+                f"DART에서 재무제표를 찾지 못한 회사: {', '.join(report['missing'])} "
+                "(비상장이거나 사업보고서 미제출 대상일 수 있습니다)"
+            )
+
+        if report["scores"]:
+            score_df = pd.DataFrame(
+                [{"기업": c, "종합 점수": round(s, 1)} for c, s in report["scores"].items()]
+            ).sort_values("종합 점수", ascending=False)
+            st.markdown("**종합 점수** (0~100, 비교 대상 내 상대 순위 — 가중치는 사이드바에서 조절)")
+            fig = px.bar(score_df, x="기업", y="종합 점수", title="재무 스코어링 순위")
+            _render_bar(fig, key="dart_score_bar")
+            st.dataframe(score_df, use_container_width=True, hide_index=True, key="dart_score_df")
+        else:
+            st.caption("점수를 계산하려면 최소 2개 기업의 재무제표가 확보되어야 합니다.")
+
+        if report["ratios"]:
+            st.markdown("**원자료: 재무비율(%)**")
+            ratio_df = pd.DataFrame(report["ratios"]).T.round(2)
+            st.dataframe(ratio_df, use_container_width=True, key="dart_ratio_df")
 
 if "compare_results" in st.session_state:
     with st.container(border=True):
