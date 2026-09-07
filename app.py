@@ -317,7 +317,7 @@ def render_report(target: str, task_results: list[dict]) -> None:
 
 with st.sidebar:
     st.markdown("### 분석 설정")
-    mode = st.radio("모드", ["단일 기업 분석", "기업 비교", "협력사 발굴"], horizontal=True)
+    mode = st.radio("모드", ["단일 기업 분석", "기업 비교", "협력사 발굴"], horizontal=True, key="mode")
     industry = st.selectbox("업종 선택", options=list(schema.INDUSTRY_SCHEMAS.keys()))
 
     compare_targets: list[str] = []
@@ -341,6 +341,7 @@ with st.sidebar:
         compare_lens = st.radio(
             "비교 관점",
             ["종합 비교", "협력사·파트너 평가", "재무 스코어링 (DART)"],
+            key="compare_lens",
             help="종합 비교: 매출구조·CAPEX·경쟁사(점유율) / 협력사·파트너 평가: 재무건전성·가격경쟁력·"
             "생산능력·납기·품질리스크·기존 거래처 — 구매뿐 아니라 영업·전략기획·투자심사에도 씁니다. / "
             "재무 스코어링(DART): 웹검색·AI 없이 DART 공시 재무제표만으로 가중치 조절 가능한 정량 순위를 매깁니다 "
@@ -349,6 +350,7 @@ with st.sidebar:
         compare_input = st.text_input(
             "비교할 기업 (쉼표로 구분, 2~3개)",
             placeholder=f"{schema.TARGET_PLACEHOLDERS.get(industry, '')}, ...",
+            key="compare_input",
         )
         compare_targets = [t.strip() for t in compare_input.split(",") if t.strip()][:3]
         score_weights: dict[str, float] = {}
@@ -479,13 +481,22 @@ if compare_run and compare_lens != "재무 스코어링 (DART)":
 if discover_run:
     search.warmup()
     llm.warmup()
+    discover_error = None
     with st.spinner("후보 기업 검색 중..."):
         discover_query = f"{discover_description} 제작 업체 공급 기업"
         discover_results = search.search(discover_query, time_range=None)
-        discover_data = llm.discover_suppliers(discover_description, industry, discover_results)
+        try:
+            discover_data = llm.discover_suppliers(discover_description, industry, discover_results)
+        except Exception:
+            try:
+                discover_data = llm.discover_suppliers(discover_description, industry, discover_results)
+            except Exception as e:
+                discover_data = {"candidates": []}
+                discover_error = str(e)
     st.session_state["discover_description"] = discover_description
     st.session_state["discover_data"] = discover_data
     st.session_state["discover_sources"] = discover_results
+    st.session_state["discover_error"] = discover_error
 
 if st.session_state.get("pack_failures"):
     for label, err in st.session_state["pack_failures"]:
@@ -494,6 +505,9 @@ if st.session_state.get("pack_failures"):
 if st.session_state.get("compare_failures"):
     for company, label, err in st.session_state["compare_failures"]:
         st.warning(f"'{company}' - '{label}' 조사 중 오류가 발생해 이 항목은 비교표에서 제외됐습니다: {err}")
+
+if st.session_state.get("discover_error"):
+    st.warning(f"협력사 발굴 중 오류가 발생해 후보를 찾지 못했습니다: {st.session_state['discover_error']}")
 
 if "dart_score_report" in st.session_state:
     with st.container(border=True):
@@ -568,22 +582,43 @@ if "compare_results" in st.session_state:
 if "discover_data" in st.session_state:
     with st.container(border=True):
         st.subheader(f"'{st.session_state['discover_description']}' 협력사 후보")
-        st.caption(
-            "검색으로 찾은 후보입니다 — 이미 아는 회사를 평가하는 게 아니라 새 후보를 발굴하는 용도라, "
-            "이름이 낯설거나 오탐(관련 없는 기업)이 섞일 수 있습니다. 후보를 추린 뒤에는 '기업 비교' 모드로 넘어가 검증하세요."
+        st.warning(
+            "⚠️ **미검증 탐색 결과입니다.** Fact/Interpretation 구분, 출처 신뢰도(TIER) 등급, 자료 간 "
+            "불일치 검증을 거치지 않은, 이름과 근거 한 줄만 스캔한 목록입니다. 이름이 낯설거나 "
+            "오탐(관련 없는 기업)이 섞일 수 있습니다 — 아래에서 후보를 골라 '기업 비교'로 넘기면 "
+            "그때부터 검증된 파이프라인을 탑니다."
         )
         candidates = st.session_state["discover_data"].get("candidates", [])
         sources = st.session_state.get("discover_sources", [])
         if not candidates:
             st.caption("검색 결과에서 뚜렷한 후보 기업을 찾지 못했습니다. 설명을 더 구체적으로 바꿔서 다시 시도해보세요.")
-        for c in candidates:
+
+        selected_names = []
+        for i, c in enumerate(candidates):
             idx = c.get("source_index")
             src = sources[idx] if isinstance(idx, int) and 0 <= idx < len(sources) else None
-            st.markdown(f"**{c.get('name', '')}**")
+            name = c.get("name", "")
+            checked = st.checkbox(f"**{name}**", value=(i < 3), key=f"discover_pick_{i}")
+            if checked and name:
+                selected_names.append(name)
             st.markdown(c.get("reason", ""))
             if src and src.get("url"):
                 tier = evidence.classify_tier(src["url"])
                 st.markdown(_source_line(src, tier), unsafe_allow_html=True)
+
+        if candidates:
+            picking_disabled = not (2 <= len(selected_names) <= 3)
+            if st.button(
+                "선택한 후보로 검증하기 (기업 비교로 이동)",
+                disabled=picking_disabled,
+                key="discover_to_compare",
+            ):
+                st.session_state["mode"] = "기업 비교"
+                st.session_state["compare_lens"] = "협력사·파트너 평가"
+                st.session_state["compare_input"] = ", ".join(selected_names)
+                st.rerun()
+            if picking_disabled:
+                st.caption("2~3개를 선택해야 다음 단계로 넘어갈 수 있습니다.")
 
 if "pack_md" in st.session_state:
     if st.session_state.get("pack_dart"):
