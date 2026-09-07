@@ -333,6 +333,9 @@ with st.sidebar:
         include_opportunity = st.checkbox(
             "고객·Pain Point·비즈니스모델까지 조사 (항목 5개 추가, 시간 더 걸림)"
         )
+        include_sales = st.checkbox(
+            "영업 타겟 어카운트 관점까지 조사 (의사결정구조·트리거이벤트·기존벤더, 항목 5개 추가)"
+        )
         run = st.button("리서치 시작", disabled=not target, use_container_width=True)
     elif mode == "기업 비교":
         compare_lens = st.radio(
@@ -363,6 +366,7 @@ with st.sidebar:
         )
         target = None
         include_opportunity = False
+        include_sales = False
         run = False
     else:  # 협력사 발굴
         discover_description = st.text_input(
@@ -373,10 +377,13 @@ with st.sidebar:
         discover_run = st.button("후보 찾기", disabled=not discover_description, use_container_width=True)
         target = None
         include_opportunity = False
+        include_sales = False
         run = False
 
 if run:
-    tasks = schema.build_tasks(target, industry=industry, include_opportunity=include_opportunity)
+    tasks = schema.build_tasks(
+        target, industry=industry, include_opportunity=include_opportunity, include_sales=include_sales
+    )
     order = {t["id"]: i for i, t in enumerate(tasks)}
     task_results = []
     failures = []

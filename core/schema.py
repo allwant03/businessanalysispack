@@ -298,12 +298,49 @@ PARTNER_EVALUATION_SCHEMA = [
     },
 ]
 
+# 선택 항목: 이 회사를 "영업 타겟 어카운트"로 볼 때 필요한 정보 — 누가 사는지(의사결정구조),
+# 언제 사는지(예산·조달 주기), 왜 지금인지(트리거 이벤트), 이미 누구랑 거래 중인지(기존 벤더),
+# 무엇에 예산을 쓰려는지(전략적 우선순위). 업종에 상관없이 재사용 가능한 범용 문항으로 둔다.
+SALES_SCHEMA = [
+    {
+        "id": "SL-1",
+        "label": "구매 의사결정 구조",
+        "query": "{target} 조직도 임원진 구매 의사결정권자 예산 승인 구조",
+        "recency": None,
+    },
+    {
+        "id": "SL-2",
+        "label": "최근 영업 트리거 이벤트",
+        "query": "{target} 투자유치 신사업 진출 임원 교체 조직개편 최근",
+        "recency": "year",
+    },
+    {
+        "id": "SL-3",
+        "label": "기존 벤더 및 솔루션 현황",
+        "query": "{target} 기존 공급사 파트너십 도입 솔루션 시스템",
+        "recency": None,
+    },
+    {
+        "id": "SL-4",
+        "label": "예산·조달 주기",
+        "query": "{target} 예산 편성 시기 회계연도 조달 계획 발주 시기",
+        "recency": "year",
+    },
+    {
+        "id": "SL-5",
+        "label": "전략적 우선순위 및 투자 방향",
+        "query": "{target} 전략적 우선순위 디지털전환 신사업 투자 방향 경영목표",
+        "recency": "year",
+    },
+]
+
 CATEGORY_LABELS = {
     "industry": "산업",
     "company": "기업",
     "competitor": "경쟁사",
     "opportunity": "사업기회",
     "partner": "협력사 평가",
+    "sales": "영업 타겟 어카운트",
 }
 
 
@@ -312,12 +349,15 @@ def build_tasks(
     industry: str = "반도체",
     include_opportunity: bool = False,
     include_partner_eval: bool = False,
+    include_sales: bool = False,
 ) -> list[dict]:
     schema_dict = dict(INDUSTRY_SCHEMAS[industry])
     if include_opportunity:
         schema_dict["opportunity"] = OPPORTUNITY_SCHEMA
     if include_partner_eval:
         schema_dict["partner"] = PARTNER_EVALUATION_SCHEMA
+    if include_sales:
+        schema_dict["sales"] = SALES_SCHEMA
 
     tasks = []
     for category, items in schema_dict.items():
