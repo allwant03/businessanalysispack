@@ -205,6 +205,59 @@ def discover_suppliers(description: str, industry: str, search_results: list[dic
         return {"candidates": [], "_parse_error": raw}
 
 
+FRAMEWORK_SYSTEM_PROMPT = """당신은 경영 컨설턴트입니다. 주어진 조사 결과 요약만 근거로 SWOT(강점/약점/기회/위협) \
+분석으로 재정리합니다.
+
+규칙:
+- 각 항목(강점/약점/기회/위협)은 요약에 실제 근거가 있는 내용만 담는다. 근거가 부족하면 해당 배열을 비워두거나
+  개수를 줄인다. 억지로 4항목 모두 채우지 않는다.
+- 강점/약점은 회사 내부 역량·자원, 기회/위협은 외부 환경(시장·경쟁·규제)이라는 SWOT의 표준 구분을 따른다.
+  회사 내부 이야기를 기회/위협에, 외부 환경 이야기를 강점/약점에 잘못 넣지 않는다.
+- 한 항목당 1~2문장 이내로 간결하게 쓴다.
+- 주어진 요약 내용에 없는 사실을 지어내지 않는다.
+
+아래 JSON 형식으로만 응답한다. 다른 설명 텍스트는 추가하지 않는다.
+{"strengths": ["..."], "weaknesses": ["..."], "opportunities": ["..."], "threats": ["..."]}"""
+
+
+def synthesize_framework(target: str, industry: str, task_summaries: list[dict]) -> dict:
+    """이미 추출된 facts/interpretations만 재료로 SWOT 요약을 만든다. 검색을 다시 하지 않으므로
+    회사 하나당 1회만 호출이 늘어난다(항목 수와 무관) — synthesize_verdict()와 동일한 비용 구조."""
+    sections = []
+    for ts in task_summaries:
+        interp = " ".join(i.get("statement", "") for i in ts.get("interpretations", []))
+        facts = "; ".join(f.get("statement", "") for f in ts.get("facts", [])[:3])
+        if interp or facts:
+            sections.append(f"[{ts['label']}]\n해석: {interp or '(없음)'}\n주요 사실: {facts or '(없음)'}")
+
+    if not sections:
+        return {"strengths": [], "weaknesses": [], "opportunities": [], "threats": []}
+
+    user_prompt = f"""업종: {industry}
+대상: {target}
+
+항목별 조사 요약:
+{chr(10).join(sections)}
+
+위 요약만 근거로 SWOT 분석 JSON을 생성하세요."""
+
+    response = _get_client().messages.create(
+        model=config.MODEL,
+        max_tokens=1500,
+        thinking={"type": "disabled"},
+        system=FRAMEWORK_SYSTEM_PROMPT,
+        messages=[{"role": "user", "content": user_prompt}],
+    )
+    text_blocks = [block.text for block in response.content if block.type == "text"]
+    raw = "".join(text_blocks).strip()
+    raw = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+    raw = _extract_json_object(raw)
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return {"strengths": [], "weaknesses": [], "opportunities": [], "threats": [], "_parse_error": raw}
+
+
 def warmup() -> None:
     """Force client creation on the main thread before fan-out to worker threads."""
     _get_client()

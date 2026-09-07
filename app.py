@@ -413,7 +413,9 @@ if run:
     st.session_state["pack_md"] = context_pack.build_pack(target, task_results, industry=industry)
     st.session_state["pack_task_results"] = task_results
     st.session_state["pack_target"] = target
+    st.session_state["pack_industry"] = industry
     st.session_state["pack_failures"] = failures
+    st.session_state.pop("swot_result", None)
     st.session_state["pack_dart"] = dart.get_financial_summary(target, date.today().year)
     st.session_state["feedback_done"] = False
     usage.log_run(target, len(tasks), len(failures))
@@ -643,6 +645,43 @@ if "pack_md" in st.session_state:
         )
         with st.expander("원본 텍스트 보기"):
             st.markdown(st.session_state["pack_md"])
+
+    with st.container(border=True):
+        st.subheader("전략 프레임워크 요약 (컨설팅 관점)")
+        st.caption(
+            "이미 조사된 자료를 SWOT(강점·약점·기회·위협)으로 재정리합니다 — 새로 검색하지 않고 "
+            "1회만 추가 호출됩니다."
+        )
+        if st.button("SWOT으로 정리하기", key="swot_button"):
+            task_summaries = [
+                {
+                    "label": tr["task"]["label"],
+                    "interpretations": tr["data"].get("interpretations", []),
+                    "facts": tr["data"].get("facts", []),
+                }
+                for tr in st.session_state["pack_task_results"]
+            ]
+            with st.spinner("SWOT 정리 중..."):
+                st.session_state["swot_result"] = llm.synthesize_framework(
+                    st.session_state["pack_target"], st.session_state["pack_industry"], task_summaries
+                )
+        if "swot_result" in st.session_state:
+            swot = st.session_state["swot_result"]
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown("**강점 (Strengths)**")
+                for s in swot.get("strengths", []) or ["(근거 부족)"]:
+                    st.markdown(f"- {s}")
+                st.markdown("**기회 (Opportunities)**")
+                for s in swot.get("opportunities", []) or ["(근거 부족)"]:
+                    st.markdown(f"- {s}")
+            with col2:
+                st.markdown("**약점 (Weaknesses)**")
+                for s in swot.get("weaknesses", []) or ["(근거 부족)"]:
+                    st.markdown(f"- {s}")
+                st.markdown("**위협 (Threats)**")
+                for s in swot.get("threats", []) or ["(근거 부족)"]:
+                    st.markdown(f"- {s}")
 
     with st.container(border=True):
         st.subheader("이 자료가 도움이 되었나요?")
