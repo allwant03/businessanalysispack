@@ -41,19 +41,31 @@ def _ensure_corp_codes() -> None:
     CORP_CODE_CACHE.write_bytes(data)
 
 
-def find_corp_code(company_name: str) -> str | None:
-    """상장/공시 기업명 목록에서 corp_code를 찾는다. 해외 기업 등 못 찾으면 None."""
+def find_corp_codes(company_name: str) -> list[str]:
+    """상장/공시 기업명 목록에서 corp_code 후보를 전부 찾는다. 동일한 이름의 법인이 여러 개
+    등록돼 있는 경우가 실제로 있어서(예: 청산·개명 이력이 있는 대기업 계열사), 첫 번째 매치만
+    쓰면 재무데이터가 없는 법인을 잘못 고를 수 있다 — 그래서 exact match를 전부 모아서 반환하고,
+    호출하는 쪽에서 실제 재무데이터가 있는 후보를 찾을 때까지 순서대로 시도한다."""
     _ensure_corp_codes()
     root = ET.parse(CORP_CODE_CACHE).getroot()
     name = company_name.strip()
+    exact: list[str] = []
     contains = None
     for el in root.findall("list"):
         corp_name = (el.findtext("corp_name") or "").strip()
         if corp_name == name:
-            return el.findtext("corp_code")
-        if contains is None and name and name in corp_name and (el.findtext("stock_code") or "").strip():
+            exact.append(el.findtext("corp_code"))
+        elif contains is None and name and name in corp_name and (el.findtext("stock_code") or "").strip():
             contains = el.findtext("corp_code")
-    return contains
+    if exact:
+        return exact
+    return [contains] if contains else []
+
+
+def find_corp_code(company_name: str) -> str | None:
+    """하위 호환용 — 첫 후보만 반환한다. 동명이인 법인 처리가 필요하면 find_corp_codes()를 쓸 것."""
+    codes = find_corp_codes(company_name)
+    return codes[0] if codes else None
 
 
 def _fetch(year: str, corp_code: str, reprt_code: str = "11011") -> list[dict]:
@@ -87,17 +99,22 @@ def get_financial_summary(company_name: str, latest_year: int) -> dict | None:
     if not config.DART_API_KEY:
         return None
 
-    corp_code = find_corp_code(company_name)
-    if not corp_code:
+    corp_codes = find_corp_codes(company_name)
+    if not corp_codes:
         return None
 
+    corp_code = None
     rows: list[dict] = []
     used_year = None
-    for offset in range(3):
-        year = latest_year - offset
-        rows = _fetch(str(year), corp_code)
+    for candidate in corp_codes:
+        for offset in range(3):
+            year = latest_year - offset
+            rows = _fetch(str(year), candidate)
+            if rows:
+                corp_code = candidate
+                used_year = year
+                break
         if rows:
-            used_year = year
             break
     if not rows:
         return None
